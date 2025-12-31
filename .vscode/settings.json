@@ -1,0 +1,9 @@
+{
+    "cmake.configureEnvironment": {
+        "CMAKE_PREFIX_PATH": "~/local/libdatachannel-install"
+    },
+    // Alternatively, as a CMake cache setting (note the different syntax and path separator)
+    "cmake.configureArgs": [
+        "-DCMAKE_PREFIX_PATH=~/local/libdatachannel-install"
+    ]
+}
