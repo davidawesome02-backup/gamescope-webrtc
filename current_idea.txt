@@ -1,0 +1,8 @@
+Okay, so current idea, split the curren partydeck launch code into a diffrent program that:
+
+2. Optionaly creates uinput devices
+3. opens and creates user ns
+4. Isolates controler devices (and optional uinput devices)
+5. Create a inotify waiter for the /dev interface, blocking new input devices optaionly
+6. launch gamescope, tracking the pid, specifying mouse and keyboard if selected.
+7. optionaly opens webrtc connection, and forward events recived over it. -- to get pipewire context, use the PID from gamescope, wait for options inside connect to pipewire, and ask what the pid is for all of them till we find gamescope

@@ -52,13 +52,9 @@ static int rtp_avio_write(void *opaque, const uint8_t *buf, int buf_size) {
     
 }
 
-
-// #define printf_maybe (const char *__restrict __fmt, ...)
-// {
-// //   return __printf_chk (__fmt, __va_arg_pack ());
-// }
-
 typedef struct {
+        uint32_t fps = 60;
+
         struct pw_main_loop *loop;
         struct pw_stream *stream;
 
@@ -111,7 +107,7 @@ static bool setup_libav_buffers(stateData *data) {
 
 
 
-    int TARGET_FPS = 1; // DOSNT MATTER AT ALL
+    int TARGET_FPS = data->fps; // DOSNT MATTER AT ALL
 
 
     const AVCodec *encoder = avcodec_find_encoder(AV_CODEC_ID_H264);
@@ -132,10 +128,6 @@ static bool setup_libav_buffers(stateData *data) {
     AVDictionary *codec_opts = NULL;
     av_dict_set(&codec_opts, "preset", "ultrafast", 0);
     av_dict_set(&codec_opts, "tune", "zerolatency", 0);
-    // av_dict_set(&codec_opts, "threads", "1", 0);
-    // av_dict_set(&codec_opts, "bframes", "0", 0);
-    // av_dict_set(&codec_opts, "rc-lookahead", "0", 0);
-    // av_dict_set(&codec_opts, "x264-params", "keyint=1:min-keyint=1:no-scenecut=1", 0);
 
 
     ret = avcodec_open2(data->encCtx, encoder, &codec_opts);
@@ -402,8 +394,9 @@ static void send_frame_timer(void *userdata, long unsigned int a) {
 
 
 int main(int argc, char *argv[]) {
-        printf("Hi me! B\n");
         stateData data = { 0, };
+        data.fps = 60;
+
         const struct spa_pod *params[1];
         uint8_t buffer[1024];
         struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
@@ -411,7 +404,6 @@ int main(int argc, char *argv[]) {
 
         pw_init(&argc, &argv);
 
-        printf("Hi me! A\n");
         data.loop = pw_main_loop_new(NULL);
 
         props = pw_properties_new(PW_KEY_MEDIA_TYPE, "Video",
@@ -432,7 +424,7 @@ int main(int argc, char *argv[]) {
 
         struct spa_fraction min_framerate = SPA_FRACTION(0, 1);
         struct spa_fraction max_framerate = SPA_FRACTION(1000, 1);
-        struct spa_fraction default_framerate = SPA_FRACTION(25, 1);
+        struct spa_fraction default_framerate = SPA_FRACTION(data.fps, 1);
 
         params[0] = (const struct spa_pod*) spa_pod_builder_add_object(&b,
                 SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
@@ -462,13 +454,12 @@ int main(int argc, char *argv[]) {
         setup_RTC(&data);
 
 
-        const int fps = 30;
-        const int interval_ms = 1000 / fps; // 16ms for 60 FPS
+        const int interval_ms = 1000 / data.fps; // 16ms for 60 FPS
         auto frame_timer = pw_loop_add_timer(pw_main_loop_get_loop(data.loop), send_frame_timer, (void*) &data);
         PW_THROW_IF(!frame_timer, "Failed to create timer for frame sending");
         // Set the timer to trigger every interval_ms milliseconds
-        struct timespec interval = { .tv_sec = 0, .tv_nsec = 1000000 * (1000 / fps) };  // 60 FPS in ns
-        struct timespec value = { .tv_sec = 0, .tv_nsec = 1000000 * (1000 / fps) };  // 60 FPS in ns
+        struct timespec interval = { .tv_sec = 0, .tv_nsec = 1000000 * (1000 / data.fps) };  // 60 FPS in ns
+        struct timespec value = { .tv_sec = 0, .tv_nsec = 1000000 * (1000 / data.fps) };  // 60 FPS in ns
 
         // Set the initial value and interval for the timer
         pw_loop_update_timer(pw_main_loop_get_loop(data.loop), frame_timer, &value, &interval, true);
