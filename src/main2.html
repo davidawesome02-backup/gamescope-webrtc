@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>libdatachannel media sender example</title>
+</head>
+<body>
+
+<p>Please enter the offer provided to you by the sender application: </p>
+<textarea cols="80" rows="25"></textarea>
+<button>Submit</button>
+
+<p>Select media handling method:</p>
+<select id="media-handling-method">
+    <option value="media-codecs">Use WebRTC Media Codecs (H.264)</option>
+    <option value="direct-frame-processing">Direct Frame Processing (WebCodecs)</option>
+</select>
+
+<video id="video-element" muted style="image-rendering: pixelated;"></video>
+
+<script>
+    document.querySelector('textarea').value = String.raw`PASTE HERE`;
+
+    document.querySelector('button').addEventListener('click',  async () => {
+        const offer = JSON.parse(document.querySelector('textarea').value);
+        const pc = new RTCPeerConnection({
+            bundlePolicy: 'max-bundle',
+            iceServers: [
+                { urls: "stun:stun.l.google.com:19302" },
+                { urls: "stun:stun1.l.google.com:19302" },
+                { urls: "stun:stun2.l.google.com:19302" }
+            ]
+        });
+
+        pc.onicegatheringstatechange = () => {
+            if (pc.iceGatheringState === 'complete') {
+                const answer = pc.localDescription;
+                let asd = JSON.stringify({ "type": answer.type, sdp: answer.sdp });
+                document.querySelector('textarea').value = asd;
+                document.querySelector('p').value = 'Please paste the answer in the sender application.';
+                navigator.sendBeacon("test?a=" + btoa(JSON.stringify({ "type": answer.type, sdp: answer.sdp })));
+            }
+        };
+
+        pc.ontrack = (evt) => {
+            console.log("Got track!", evt);
+            const videoElement = document.getElementById('video-element');
+            videoElement.srcObject = evt.streams[0];
+            try {
+                videoElement.play();
+            } catch { console.log("Can't autoplay!"); }
+
+            // If using direct frame processing, disable WebRTC's automatic media handling
+            if (document.getElementById('media-handling-method').value === 'direct-frame-processing') {
+                handleDirectFrameProcessing(evt);
+            } else {
+                // Normal WebRTC Media Codecs handling
+                const receiver = evt.transceiver.receiver;
+                receiver.jitterBufferTarget = 0; // Lowering jitter buffer target
+                receiver.jitterBufferDelayHint = 0; // Lowering jitter buffer delay hint
+                receiver.playoutDelayHint = 0; // Minimizing playout delay
+            }
+        };
+
+        await pc.setRemoteDescription(offer);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        window.pc_ = pc;
+    });
+
+    // Function to handle direct frame processing using WebCodecs
+    async function handleDirectFrameProcessing(evt) {
+        const track = evt.track;
+        const trackProcessor = new MediaStreamTrackProcessor(track);
+        const reader = trackProcessor.readable.getReader();
+
+        // Infer resolution from the incoming track
+        const width = track.getSettings().width || 1280;  // Default to 1280 if width is not available
+        const height = track.getSettings().height || 720; // Default to 720 if height is not available
+
+        // Set up the WebCodecs encoder with 60fps and inferred resolution
+        const encoder = new VideoEncoder({
+            output: handleEncodedFrame,
+            error: (e) => console.error('Encoder error:', e),
+        });
+
+        const config = {
+            codec: 'h264', // Use H.264 codec
+            width: width,
+            height: height,
+            bitrate: 1000000, // Set bitrate (you may want to adjust this based on network conditions)
+            framerate: 60, // Set frame rate to 60 FPS for low-latency video
+        };
+
+        encoder.configure(config);
+
+        // Read frames from the track and process them
+        async function processFrames() {
+            const result = await reader.read();
+            if (result.done) return;
+
+            const frame = result.value;
+
+            // Encode the frame and send it
+            encoder.encode(frame);
+            frame.close(); // Clean up the frame
+
+            // Continue reading frames
+            processFrames();
+        }
+
+        // Start the processing loop immediately
+        processFrames();
+
+        // Handle the encoded frames (render them directly to the <video> element)
+        function handleEncodedFrame(encodedFrame) {
+            console.log('Encoded frame:', encodedFrame);
+
+            // Create a new VideoFrame for the encoded frame and display it in the <video> element
+            const videoElement = document.getElementById('video-element');
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+
+            // Drawing the encoded frame onto the canvas
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(encodedFrame, 0, 0, width, height);
+
+            // Set the video element's source to the canvas's video stream
+            videoElement.srcObject = canvas.captureStream(30);  // 30 FPS capture stream
+            videoElement.play();
+        }
+    }
+</script>
+
+</body>
+</html>

@@ -40,14 +40,18 @@
             console.log("Got track!", evt)
 			const videoElement = document.getElementById('video-element');
 			videoElement.srcObject = evt.streams[0];
+            try {
 			videoElement.play();
-
+            } catch {console.log("Cant autoplay!")}
             // Try setting jitter buffer parameters, none of this work :P
             const receiver = evt.transceiver.receiver;
             receiver.jitterBufferTarget = 0; // Lowering jitter buffer target
             receiver.jitterBufferDelayHint = 0; // Lowering jitter buffer delay hint
             receiver.playoutDelayHint = 0; // Minimizing playout delay
 		};
+        pc.ondatachannel = (evt) => {
+            
+        }
 
         await pc.setRemoteDescription(offer);
 

@@ -35,13 +35,28 @@ static const uint32_t SSRC = 42;
 static const int RTP_MTU = 1200;
 
 
+#define send_instantly true
+#define use_data_channels true
+
 // RTP AVIO write callback: called by FFmpeg for each RTP packet
 static int rtp_avio_write(void *opaque, const uint8_t *buf, int buf_size) {
     try {
+        #if use_data_channels
+            printf("Would have writen %d\n", buf_size);
+
+            auto *datatrack = reinterpret_cast<rtc::DataChannel *>(opaque);
+            if (datatrack->isOpen()) {
+                datatrack->send(reinterpret_cast<const std::byte *>(buf), buf_size);
+            } else {
+                printf("datatrack closed!");
+            }
+        #else
         auto *track = reinterpret_cast<rtc::Track *>(opaque);
         // printf("Would have writen %d\n", buf_size);
         if (track->isOpen())
             track->send(reinterpret_cast<const std::byte *>(buf), buf_size);
+
+        #endif
     }
     catch (const std::runtime_error& e) {
         // Catch the specific exception type
@@ -62,6 +77,7 @@ typedef struct {
 
 
         std::shared_ptr<rtc::Track> track;
+        std::shared_ptr<rtc::DataChannel> datatrack;
 
 
         AVFrame *latest_frame = nullptr;
@@ -155,8 +171,13 @@ static bool setup_libav_buffers(stateData *data) {
 
     int avio_buf_size = RTP_MTU + 256;
     uint8_t *avioBuffer = (uint8_t *)av_malloc(avio_buf_size);
+    #if use_data_channels
+    AVIOContext *avio = avio_alloc_context(
+        avioBuffer, avio_buf_size, 1, data->datatrack.get(), nullptr, rtp_avio_write, nullptr);
+    #else
     AVIOContext *avio = avio_alloc_context(
         avioBuffer, avio_buf_size, 1, data->track.get(), nullptr, rtp_avio_write, nullptr);
+    #endif
     data->rtpFmt->pb = avio;
     data->rtpFmt->packet_size = RTP_MTU;
     data->rtpFmt->flags |= AVFMT_FLAG_CUSTOM_IO;
@@ -203,6 +224,8 @@ static void setup_RTC(stateData *data) {
     media.addH264Codec(96);
     media.addSSRC(SSRC, "video-send");
     data->track = pc->addTrack(media);
+
+    data->datatrack = pc->createDataChannel("video-data");
     
     pc->setLocalDescription();
 
@@ -212,6 +235,7 @@ static void setup_RTC(stateData *data) {
     json j = json::parse(sdp);
     rtc::Description answer(j["sdp"].get<std::string>(), j["type"].get<std::string>());
     pc->setRemoteDescription(answer);
+
 }
 
 static void send_latest_data(stateData *data) {
@@ -322,8 +346,9 @@ static void on_process(void *userdata) {
                 src + y * stride, stride);
         }
 
-        // send_latest_data(data);
-
+        #if send_instantly
+        send_latest_data(data);
+        #endif
         // printf("got a frame of size %d\n", spa_buffer->datas[0].chunk->size);
 
         pw_stream_queue_buffer(data->stream, b);
@@ -454,6 +479,8 @@ int main(int argc, char *argv[]) {
         setup_RTC(&data);
 
 
+        #if send_instantly
+        #else
         const int interval_ms = 1000 / data.fps; // 16ms for 60 FPS
         auto frame_timer = pw_loop_add_timer(pw_main_loop_get_loop(data.loop), send_frame_timer, (void*) &data);
         PW_THROW_IF(!frame_timer, "Failed to create timer for frame sending");
@@ -465,6 +492,7 @@ int main(int argc, char *argv[]) {
         pw_loop_update_timer(pw_main_loop_get_loop(data.loop), frame_timer, &value, &interval, true);
 
         // pw_timer_set(frame_timer, interval_ms, interval_ms);  // The same interval for both initial delay and periodicity
+        #endif
 
 
         pw_main_loop_run(data.loop);
