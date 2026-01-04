@@ -82,15 +82,21 @@
         if (document.pointerLockElement === videoElement) {
             console.log("The pointer lock status is now locked");
             document.addEventListener("mousemove", updateMousePosition);
+            document.addEventListener("mouseup", updateMousePosition);
+            document.addEventListener("mousedown", updateMousePosition);
         } else {
             console.log("The pointer lock status is now unlocked");
             document.removeEventListener("mousemove", updateMousePosition);
+            document.removeEventListener("mouseup", updateMousePosition);
+            document.removeEventListener("mousedown", updateMousePosition);
         }
     }
     function updateMousePosition(e) {
         // x += e.movementX;
         // y += e.movementY;
-        send_data = new Int8Array([e.movementX, e.movementY]);
+        // console.log(e);
+        // buttons_held = 0;
+        send_data = new Int8Array([e.movementX, e.movementY, e.buttons]);
         // console.log(send_data)
         data_channel.send(send_data)
     }

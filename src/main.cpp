@@ -253,12 +253,16 @@ void emit_uinput(int fd, int type, int code, int val)
 static void recive_data_message(stateData *data, rtc::message_variant recived) {
     if (!std::holds_alternative<rtc::binary>(recived)) return;
     auto bin_data = std::get<rtc::binary>(recived);
-    if (bin_data.size() == 2 && data->uinput_fd >= 0) {
+    if (bin_data.size() == 3 && data->uinput_fd >= 0) {
         int8_t x_movement = std::to_integer<int8_t>(bin_data.at(0));
         int8_t y_movement = std::to_integer<int8_t>(bin_data.at(1));
-        // printf("Test: %d, %d\n", x_movement, y_movement);
+        int8_t mouse_buttons = std::to_integer<int8_t>(bin_data.at(2));
+        printf("Test: %d, %d, %d\n", x_movement, y_movement, mouse_buttons);
         emit_uinput(data->uinput_fd, EV_REL, REL_X, x_movement);
         emit_uinput(data->uinput_fd, EV_REL, REL_Y, y_movement);
+        emit_uinput(data->uinput_fd, EV_KEY, BTN_LEFT,      (mouse_buttons>>0) & 1);
+        emit_uinput(data->uinput_fd, EV_KEY, BTN_RIGHT,     (mouse_buttons>>1) & 1);
+        emit_uinput(data->uinput_fd, EV_KEY, BTN_MIDDLE,    (mouse_buttons>>2) & 1);
         emit_uinput(data->uinput_fd, EV_SYN, SYN_REPORT, 0);
 
     }
