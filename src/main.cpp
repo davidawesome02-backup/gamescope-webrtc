@@ -24,7 +24,12 @@ extern "C" {
 #include <libavutil/avutil.h>
 #include <libavutil/frame.h>
 #include <libswscale/swscale.h>
+
+#include <linux/uinput.h>
+#include <unistd.h>
+#include <fcntl.h>
 }
+
 
 // Helper (for error handling)
 #define PW_THROW_IF(cond, msg) if (cond) throw std::runtime_error(msg);
@@ -80,6 +85,10 @@ typedef struct {
 
         AVFormatContext *rtpFmt;
         AVCodecContext *encCtx;
+
+
+
+        int uinput_fd;
 } stateData;
 
 
@@ -180,13 +189,78 @@ static bool setup_libav_buffers(stateData *data) {
     return true;
 }
 
-static void recive_data_message(rtc::message_variant data) {
-    if (!std::holds_alternative<rtc::binary>(data)) return;
-    auto bin_data = std::get<rtc::binary>(data);
-    if (bin_data.size() == 2) {
+
+#define IOCTL_WRAPPER(call) \
+    ({ \
+        typeof(call) ret = (call); \
+        if (ret < 0) { \
+            fprintf(stderr, "IOCTL failed at %s:%d: %s\n", __FILE__, __LINE__, strerror(errno)); \
+            exit(EXIT_FAILURE); \
+        } \
+        ret; \
+    })
+
+
+static bool setup_uinput(stateData *data) {
+    data->uinput_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
+    if (data->uinput_fd < 0) {
+        perror("Damn no uinput");
+        return false;
+    }
+    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_EVBIT, EV_REL));
+    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_RELBIT, REL_X));
+    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_RELBIT, REL_Y));
+
+
+    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_EVBIT, EV_SYN));
+
+
+    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_EVBIT, EV_KEY));
+    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_KEYBIT, BTN_LEFT));
+    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_KEYBIT, BTN_RIGHT));
+    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_KEYBIT, BTN_MIDDLE));
+
+
+    struct uinput_setup usetup = {0};
+    // memset(usetup, 0, sizeof(usetup));
+    usetup.id.bustype = BUS_USB;
+    usetup.id.vendor = 0x1234;
+    usetup.id.product = 0x5678;
+    strcpy(usetup.name, "Example dev!");
+
+    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_DEV_SETUP, &usetup));
+    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_DEV_CREATE));
+
+    return true;
+}
+
+void emit_uinput(int fd, int type, int code, int val)
+{
+   struct input_event ie;
+
+   ie.type = type;
+   ie.code = code;
+   ie.value = val;
+   /* timestamp values below are ignored */
+   ie.time.tv_sec = 0;
+   ie.time.tv_usec = 0;
+
+   ssize_t n = write(fd, &ie, sizeof(ie));
+   if (n<0) {
+        perror("Failed to write to uinput");
+   }
+}
+static void recive_data_message(stateData *data, rtc::message_variant recived) {
+    if (!std::holds_alternative<rtc::binary>(recived)) return;
+    auto bin_data = std::get<rtc::binary>(recived);
+    if (bin_data.size() == 2 && data->uinput_fd >= 0) {
         int8_t x_movement = std::to_integer<int8_t>(bin_data.at(0));
         int8_t y_movement = std::to_integer<int8_t>(bin_data.at(1));
-        printf("Test: %d, %d\n", x_movement, y_movement);
+        // printf("Test: %d, %d\n", x_movement, y_movement);
+        emit_uinput(data->uinput_fd, EV_REL, REL_X, x_movement);
+        emit_uinput(data->uinput_fd, EV_REL, REL_Y, y_movement);
+        emit_uinput(data->uinput_fd, EV_SYN, SYN_REPORT, 0);
+
     }
     //  x_movement
     // printf("Test: %d, %d\n", x_movement, y_movement);
@@ -226,7 +300,9 @@ static void setup_RTC(stateData *data) {
         protocol: "hi",
     });
 
-    data->datatrack.get()->onMessage(recive_data_message);
+    data->datatrack.get()->onMessage([data](rtc::message_variant a){
+        recive_data_message(data,a);
+    });
 
     // data->datatrack.get
     
@@ -503,6 +579,8 @@ int main(int argc, char *argv[]) {
 
         // pw_timer_set(frame_timer, interval_ms, interval_ms);  // The same interval for both initial delay and periodicity
         #endif
+
+        setup_uinput(&data);
 
 
         pw_main_loop_run(data.loop);
