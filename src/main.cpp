@@ -35,28 +35,16 @@ static const uint32_t SSRC = 42;
 static const int RTP_MTU = 1200;
 
 
-#define send_instantly true
-#define use_data_channels true
+#define send_instantly false
+// #define send_instantly true
 
 // RTP AVIO write callback: called by FFmpeg for each RTP packet
 static int rtp_avio_write(void *opaque, const uint8_t *buf, int buf_size) {
     try {
-        #if use_data_channels
-            printf("Would have writen %d\n", buf_size);
-
-            auto *datatrack = reinterpret_cast<rtc::DataChannel *>(opaque);
-            if (datatrack->isOpen()) {
-                datatrack->send(reinterpret_cast<const std::byte *>(buf), buf_size);
-            } else {
-                printf("datatrack closed!");
-            }
-        #else
         auto *track = reinterpret_cast<rtc::Track *>(opaque);
         // printf("Would have writen %d\n", buf_size);
         if (track->isOpen())
             track->send(reinterpret_cast<const std::byte *>(buf), buf_size);
-
-        #endif
     }
     catch (const std::runtime_error& e) {
         // Catch the specific exception type
@@ -171,13 +159,10 @@ static bool setup_libav_buffers(stateData *data) {
 
     int avio_buf_size = RTP_MTU + 256;
     uint8_t *avioBuffer = (uint8_t *)av_malloc(avio_buf_size);
-    #if use_data_channels
-    AVIOContext *avio = avio_alloc_context(
-        avioBuffer, avio_buf_size, 1, data->datatrack.get(), nullptr, rtp_avio_write, nullptr);
-    #else
+
     AVIOContext *avio = avio_alloc_context(
         avioBuffer, avio_buf_size, 1, data->track.get(), nullptr, rtp_avio_write, nullptr);
-    #endif
+
     data->rtpFmt->pb = avio;
     data->rtpFmt->packet_size = RTP_MTU;
     data->rtpFmt->flags |= AVFMT_FLAG_CUSTOM_IO;
@@ -193,6 +178,18 @@ static bool setup_libav_buffers(stateData *data) {
 
 
     return true;
+}
+
+static void recive_data_message(rtc::message_variant data) {
+    if (!std::holds_alternative<rtc::binary>(data)) return;
+    auto bin_data = std::get<rtc::binary>(data);
+    if (bin_data.size() == 2) {
+        int8_t x_movement = std::to_integer<int8_t>(bin_data.at(0));
+        int8_t y_movement = std::to_integer<int8_t>(bin_data.at(1));
+        printf("Test: %d, %d\n", x_movement, y_movement);
+    }
+    //  x_movement
+    // printf("Test: %d, %d\n", x_movement, y_movement);
 }
 
 static void setup_RTC(stateData *data) {
@@ -225,7 +222,13 @@ static void setup_RTC(stateData *data) {
     media.addSSRC(SSRC, "video-send");
     data->track = pc->addTrack(media);
 
-    data->datatrack = pc->createDataChannel("video-data");
+    data->datatrack = pc->createDataChannel("video-data", {
+        protocol: "hi",
+    });
+
+    data->datatrack.get()->onMessage(recive_data_message);
+
+    // data->datatrack.get
     
     pc->setLocalDescription();
 
@@ -246,6 +249,13 @@ static void send_latest_data(stateData *data) {
         data->enc_frame->data, data->enc_frame->linesize
     );
     data->enc_frame->pts = data->frame_pts++;
+
+#if send_instantly
+    int64_t now_us = av_gettime();
+    data->enc_frame->pts =
+        av_rescale_q(now_us, AVRational{1,1000000}, data->encCtx->time_base);
+
+#endif
 
     // Encode and stream as before:
     avcodec_send_frame(data->encCtx, data->enc_frame);

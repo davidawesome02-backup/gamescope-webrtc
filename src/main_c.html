@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>libdatachannel media sender example</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+            padding: 0;
+        }
+        body > video {
+            image-rendering: pixelated;
+            width: 100vw;
+            height: 100vh;
+            object-fit: contain;
+        }
+        #connect_popup {
+            width: 50vmin;
+            height: 50vmin;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="connect_popup">
+        <p>Please enter the offer provided to you by the sender application: </p>
+        <textarea cols="80" rows="25"></textarea>
+        <button>Submit</button>
+    </div>
+
+    <video id="video-element" muted class="hidden"></video>
+
+<script>
+    /** @type {RTCDataChannel} */
+    let data_channel;
+
+    document.querySelector('textarea').value = String.raw`PASTE HERE`;
+    const videoElement = document.getElementById('video-element');
+    videoElement.onload = () => {
+        console.log("Video loaded!")
+    }
+    function getVideoCoords(video, event) {
+        const rect = video.getBoundingClientRect();
+        const vw = video.videoWidth;
+        const vh = video.videoHeight;
+
+        const scaleX = rect.width / vw;
+        const scaleY = rect.height / vh;
+        const scale = Math.min(scaleX, scaleY);
+
+        const displayW = vw * scale;
+        const displayH = vh * scale;
+
+        const offsetX = (rect.width  - displayW) / 2;
+        const offsetY = (rect.height - displayH) / 2;
+
+        const x = event.clientX - rect.left - offsetX;
+        const y = event.clientY - rect.top  - offsetY;
+
+        if (x < 0 || y < 0 || x > displayW || y > displayH) return null;
+
+        return { x: x / scale, y: y / scale };
+    }
+
+    videoElement.onclick = (evt) => {
+        // console.log(getVideoCoords(videoElement, evt))
+        if (!document.pointerLockElement) {
+            videoElement.requestPointerLock();
+        }
+    };
+
+    function lockChangeAlert() {
+        if (document.pointerLockElement === videoElement) {
+            console.log("The pointer lock status is now locked");
+            document.addEventListener("mousemove", updateMousePosition);
+        } else {
+            console.log("The pointer lock status is now unlocked");
+            document.removeEventListener("mousemove", updateMousePosition);
+        }
+    }
+    function updateMousePosition(e) {
+        // x += e.movementX;
+        // y += e.movementY;
+        send_data = new Int8Array([e.movementX, e.movementY]);
+        // console.log(send_data)
+        data_channel.send(send_data)
+    }
+
+    document.addEventListener("pointerlockchange", lockChangeAlert);
+
+
+    document.querySelector('button').addEventListener('click',  async () => {
+        const offer = JSON.parse(document.querySelector('textarea').value);
+        const pc = new RTCPeerConnection({
+            // Recommended for libdatachannel
+            bundlePolicy: 'max-bundle',
+            iceServers: [ { urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }, { urls: "stun:stun2.l.google.com:19302" } ]
+        });
+
+        pc.onicegatheringstatechange = (state) => {
+            if (pc.iceGatheringState === 'complete') {
+                // We only want to provide an answer once all of our candidates have been added to the SDP.
+                const answer = pc.localDescription;
+                let asd = JSON.stringify({"type": answer.type, sdp: answer.sdp});
+                document.querySelector('textarea').value = asd;
+                document.querySelector('p').value = 'Please paste the answer in the sender application.';
+                navigator.sendBeacon("test?a="+btoa(JSON.stringify({"type": answer.type, sdp: answer.sdp})) );
+                // alert('Please paste the answer in the sender application.');
+            }
+        }
+
+		pc.ontrack = (evt) => {
+            console.log(evt)
+            console.log("Got track!", evt);
+            evt.streams[0].onactive = () => {
+                console.log("Playback!")
+            }
+            evt.streams[0].onaddtrack = () => {
+                console.log("Playback 3!")
+            }
+            console.log("asdas: ", evt.streams[0].active)
+			videoElement.srcObject = evt.streams[0];
+            try {
+			videoElement.play();
+            } catch {console.log("Cant autoplay!")}
+            // Try setting jitter buffer parameters, none of this work :P
+            const receiver = evt.transceiver.receiver;
+            receiver.jitterBufferTarget = 0; // Lowering jitter buffer target
+            receiver.jitterBufferDelayHint = 0; // Lowering jitter buffer delay hint
+            receiver.playoutDelayHint = 0; // Minimizing playout delay
+		};
+        pc.ondatachannel = (evt) => {
+            console.log(evt);
+            data_channel = evt.channel;
+            evt.channel.addEventListener("open", ()=>{
+                console.log("datach open");
+                
+                document.getElementById("connect_popup").classList.toggle("hidden");
+                document.getElementById("video-element").classList.toggle("hidden");
+                
+
+            })
+        }
+
+        await pc.setRemoteDescription(offer);
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        window.pc_ = pc
+    })
+</script>
+
+</body>
+</html>
