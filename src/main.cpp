@@ -200,6 +200,18 @@ static bool setup_libav_buffers(stateData *data) {
         ret; \
     })
 
+template <class T>
+T read_le_from_vec(const std::vector<std::byte>& buf, std::size_t offset) {
+    static_assert(std::is_integral_v<T>, "T must be an integer type");
+
+    T value = 0;
+    for (std::size_t i = 0; i < sizeof(T); ++i) {
+        value |= static_cast<T>(std::to_integer<uint8_t>(buf[offset + i])) << (8 * i);
+    }
+    return value;
+}
+
+
 
 static bool setup_uinput(stateData *data) {
     data->uinput_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
@@ -211,6 +223,8 @@ static bool setup_uinput(stateData *data) {
     IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_RELBIT, REL_X));
     IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_RELBIT, REL_Y));
 
+    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_RELBIT, REL_WHEEL));
+
 
     IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_EVBIT, EV_SYN));
 
@@ -219,6 +233,8 @@ static bool setup_uinput(stateData *data) {
     IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_KEYBIT, BTN_LEFT));
     IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_KEYBIT, BTN_RIGHT));
     IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_KEYBIT, BTN_MIDDLE));
+
+    
 
 
     struct uinput_setup usetup = {0};
@@ -253,19 +269,40 @@ void emit_uinput(int fd, int type, int code, int val)
 static void recive_data_message(stateData *data, rtc::message_variant recived) {
     if (!std::holds_alternative<rtc::binary>(recived)) return;
     auto bin_data = std::get<rtc::binary>(recived);
-    if (bin_data.size() == 3 && data->uinput_fd >= 0) {
-        int8_t x_movement = std::to_integer<int8_t>(bin_data.at(0));
-        int8_t y_movement = std::to_integer<int8_t>(bin_data.at(1));
-        int8_t mouse_buttons = std::to_integer<int8_t>(bin_data.at(2));
-        printf("Test: %d, %d, %d\n", x_movement, y_movement, mouse_buttons);
+    if (!(data->uinput_fd >= 0)) return;
+
+    if (bin_data.size() < 1) return;
+    auto type_selected = read_le_from_vec<int8_t>(bin_data, 0);
+
+    // for (const std::byte& b : bin_data) {
+    //     std::cout << "0x" << std::hex << +std::to_integer<uint8_t>(b) << " ";  // "+" is used to convert std::byte to an integer
+    // }
+    // std::cout << std::endl;
+
+    if (bin_data.size() >= 6 && type_selected == 0) {
+        int16_t x_movement = read_le_from_vec<int16_t>(bin_data,1);
+        int16_t y_movement = read_le_from_vec<int16_t>(bin_data,3);
+        int16_t scroll_movement = read_le_from_vec<int16_t>(bin_data,5);
+        // int8_t mouse_buttons = std::to_integer<int8_t>(bin_data.at(4));
+        // printf("Mouse movement: %d, %d, %d\n", x_movement, y_movement, scroll_movement);
         emit_uinput(data->uinput_fd, EV_REL, REL_X, x_movement);
         emit_uinput(data->uinput_fd, EV_REL, REL_Y, y_movement);
-        emit_uinput(data->uinput_fd, EV_KEY, BTN_LEFT,      (mouse_buttons>>0) & 1);
-        emit_uinput(data->uinput_fd, EV_KEY, BTN_RIGHT,     (mouse_buttons>>1) & 1);
-        emit_uinput(data->uinput_fd, EV_KEY, BTN_MIDDLE,    (mouse_buttons>>2) & 1);
-        emit_uinput(data->uinput_fd, EV_SYN, SYN_REPORT, 0);
+        emit_uinput(data->uinput_fd, EV_REL, REL_WHEEL, scroll_movement);
+        for (int i=7; i<bin_data.size(); i+=2) {
+            // EV_KEY
+            auto data_byte = read_le_from_vec<uint16_t>(bin_data,i);
+            // auto info_byte = read_le_from_vec<uint8_t>(bin_data,i+1);
+            bool pressed = ((data_byte&0x1000)>0);
 
+            emit_uinput(data->uinput_fd, EV_KEY, data_byte&0xFFF, pressed);
+            // printf("Pressed / released button: %d, (%d) : %d\n", data_byte&0xFFF, pressed, data_byte);
+        }
+
+        emit_uinput(data->uinput_fd, EV_SYN, SYN_REPORT, 0);
     }
+
+
+
     //  x_movement
     // printf("Test: %d, %d\n", x_movement, y_movement);
 }
@@ -282,7 +319,7 @@ static void setup_RTC(stateData *data) {
 
     auto pc = std::make_shared<rtc::PeerConnection>(config);
     pc->onStateChange([](rtc::PeerConnection::State state) {
-        std::cout << "State: " << state << std::endl;
+        std::cout << "State: " << state << std::endl; // Todo if closing, reoffer connection stuff
     });
     pc->onGatheringStateChange([pc](rtc::PeerConnection::GatheringState state) {
         if (state == rtc::PeerConnection::GatheringState::Complete) {
