@@ -1,34 +1,4 @@
-#include <spa/param/video/format-utils.h>
-#include <spa/debug/types.h>
-#include <spa/param/video/type-info.h>
-
-#include <pipewire/pipewire.h>
-
-#include "rtc/rtc.hpp"
-#include <nlohmann/json.hpp>
-#include <chrono>
-#include <thread>
-#include <iostream>
-#include <memory>
-#include <stdexcept>
-#include <utility>
-#include <cstring>
-#include <atomic>
-#include <csignal>
-
-
-// FFmpeg
-extern "C" {
-#include <libavformat/avformat.h>
-#include <libavcodec/avcodec.h>
-#include <libavutil/avutil.h>
-#include <libavutil/frame.h>
-#include <libswscale/swscale.h>
-
-#include <linux/uinput.h>
-#include <unistd.h>
-#include <fcntl.h>
-}
+#include <main.hpp>
 
 
 // Helper (for error handling)
@@ -60,36 +30,6 @@ static int rtp_avio_write(void *opaque, const uint8_t *buf, int buf_size) {
     
 }
 
-typedef struct {
-        uint32_t fps = 60;
-
-        struct pw_main_loop *loop;
-        struct pw_stream *stream;
-
-        struct spa_video_info format;
-
-
-        std::shared_ptr<rtc::Track> track;
-        std::shared_ptr<rtc::DataChannel> datatrack;
-
-
-        AVFrame *latest_frame = nullptr;
-        AVFrame *enc_frame = nullptr;
-        AVPacket *encPkt = nullptr;
-        int64_t frame_pts = 0;
-        int real_width = 0; // used for stride jumps, as a quick patch for requirements of 2x2
-        int width = 0, height = 0;
-        int streamWidth = 0, streamHeight = 0;
-        // int streamWidth = 640, streamHeight = 480;
-        SwsContext *sws = nullptr; // For format conversion
-
-        AVFormatContext *rtpFmt;
-        AVCodecContext *encCtx;
-
-
-
-        int uinput_fd;
-} stateData;
 
 
 static bool setup_libav_buffers(stateData *data) {
@@ -189,148 +129,17 @@ static bool setup_libav_buffers(stateData *data) {
     return true;
 }
 
-
-#define IOCTL_WRAPPER(call) \
-    ({ \
-        typeof(call) ret = (call); \
-        if (ret < 0) { \
-            fprintf(stderr, "IOCTL failed at %s:%d: %s\n", __FILE__, __LINE__, strerror(errno)); \
-            exit(EXIT_FAILURE); \
-        } \
-        ret; \
-    })
-
-template <class T>
-T read_le_from_vec(const std::vector<std::byte>& buf, std::size_t offset) {
-    static_assert(std::is_integral_v<T>, "T must be an integer type");
-
-    T value = 0;
-    for (std::size_t i = 0; i < sizeof(T); ++i) {
-        value |= static_cast<T>(std::to_integer<uint8_t>(buf[offset + i])) << (8 * i);
-    }
-    return value;
-}
-
-
-
-std::string find_event_node(const std::string& sysfs_input_path)
-{
-    DIR *dir = opendir(sysfs_input_path.c_str());
-    if (!dir)
-        throw std::runtime_error("opendir failed");
-
-    struct dirent *ent;
-    while ((ent = readdir(dir)) != nullptr) {
-        if (strncmp(ent->d_name, "event", 5) == 0) {
-            std::string path = "/dev/input/";
-            path += ent->d_name;
-            closedir(dir);
-            return path;
-        }
-    }
-
-    closedir(dir);
-    throw std::runtime_error("no event node found");
-}
-
-
-static bool setup_uinput(stateData *data) {
-    data->uinput_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
-    if (data->uinput_fd < 0) {
-        perror("Damn no uinput");
-        return false;
-    }
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_EVBIT, EV_REL));
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_RELBIT, REL_X));
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_RELBIT, REL_Y));
-
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_RELBIT, REL_WHEEL_HI_RES));
-
-
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_EVBIT, EV_SYN));
-
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_EVBIT, EV_KEY));
-    
-
-    // Generated via JSON.stringify(Object.values(window.key_mapping)), will be the only usable keys. 
-    auto buttons_to_bind = {
-        2,3,4,5,6,7,8,9,10,11,16,17,18,19,20,21,22,23,24,25,30,31,32,33,
-        34,35,36,37,38,44,45,46,47,48,49,50,103,105,106,108,1,12,13,14,
-        15,26,27,28,29,39,40,41,42,43,51,52,53,54,56,57,58,59,60,61,62,
-        63,64,65,66,67,68,87,88,69,70,55,71,72,73,74,75,76,77,78,79,80,
-        81,82,83,96,97,98,100,102,104,107,109,110,111,272,273,274
-    };
-    for (uint16_t button: buttons_to_bind) {
-        IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_KEYBIT, button));
-    }
-
-
-
-    
-
-
-    struct uinput_setup usetup = {0};
-    
-    usetup.id.bustype = BUS_USB;
-    usetup.id.vendor = 0x1234;
-    usetup.id.product = 0x5678;
-    strcpy(usetup.name, "Example dev!");
-
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_DEV_SETUP, &usetup));
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_DEV_CREATE));
-
-    char sysfs_device_name[16];
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_GET_SYSNAME(sizeof(sysfs_device_name)), sysfs_device_name));
-    std::string device_name = std::string(sysfs_device_name);
-    std::string dev_event_id = find_event_node("/sys/devices/virtual/input/"+device_name);
-    std::cout << "Created device: "+dev_event_id << std::endl;
-
-    return true;
-}
-
-void emit_uinput(int fd, int type, int code, int val)
-{
-   struct input_event ie;
-
-   ie.type = type;
-   ie.code = code;
-   ie.value = val;
-   /* timestamp values below are ignored */
-   ie.time.tv_sec = 0;
-   ie.time.tv_usec = 0;
-
-   ssize_t n = write(fd, &ie, sizeof(ie));
-   if (n<0) {
-        perror("Failed to write to uinput");
-   }
-}
 static void recive_data_message(stateData *data, rtc::message_variant recived) {
     if (!std::holds_alternative<rtc::binary>(recived)) return;
     auto bin_data = std::get<rtc::binary>(recived);
+    
     if (!(data->uinput_fd >= 0)) return;
 
     if (bin_data.size() < 1) return;
     auto type_selected = read_le_from_vec<int8_t>(bin_data, 0);
+    if (type_selected != 0) return;
 
-
-    if (bin_data.size() >= 6 && type_selected == 0) {
-        int16_t x_movement = read_le_from_vec<int16_t>(bin_data,1);
-        int16_t y_movement = read_le_from_vec<int16_t>(bin_data,3);
-        int16_t scroll_movement = read_le_from_vec<int16_t>(bin_data,5);
-
-        emit_uinput(data->uinput_fd, EV_REL, REL_X, x_movement);
-        emit_uinput(data->uinput_fd, EV_REL, REL_Y, y_movement);
-        emit_uinput(data->uinput_fd, EV_REL, REL_WHEEL_HI_RES, scroll_movement);
-        for (int i=7; i<bin_data.size(); i+=2) {
-            // EV_KEY
-            auto data_byte = read_le_from_vec<uint16_t>(bin_data,i);
-            bool pressed = ((data_byte&0x1000)>0);
-
-            emit_uinput(data->uinput_fd, EV_KEY, data_byte&0xFFF, pressed);
-        }
-
-        emit_uinput(data->uinput_fd, EV_SYN, SYN_REPORT, 0);
-    }
+    process_remote_message(data, bin_data);
 }
 
 static void setup_RTC(stateData *data) {
