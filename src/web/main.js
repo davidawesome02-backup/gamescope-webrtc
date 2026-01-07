@@ -47,6 +47,8 @@ function lockChangeAlert() {
         document.addEventListener("keydown", updateKeyPresses_D);
         document.addEventListener("keyup", updateKeyPresses_U);
         try {navigator?.keyboard?.lock?.()} catch {}
+
+        toggleAllButtonsOff();
     } else {
         console.log("The pointer lock status is now unlocked");
         document.removeEventListener("mousemove", updateMousePosition);
@@ -56,6 +58,9 @@ function lockChangeAlert() {
         document.removeEventListener("keydown", updateKeyPresses_D);
         document.removeEventListener("keyup", updateKeyPresses_U);
         try {navigator?.keyboard?.unlock?.()} catch {}
+
+        toggleAllButtonsOff();
+        setTimeout(toggleAllButtonsOff, 10); // Just catch any stranglers that may have happened from detach.
     }
 }
 const device_change_info = {
@@ -66,25 +71,38 @@ const device_change_info = {
     "current_buttons_status":   {},
 }
 window.device_change_info = device_change_info;
+
+function toggleAllButtonsOff() {
+    for (i in device_change_info.previous_buttons_status) {
+        if (device_change_info.previous_buttons_status[i]!=true) continue; // If the device is pressed down, press it up
+        device_change_info.change_buttons_status[i]=true;
+        device_change_info.current_buttons_status[i]=false;
+    }
+    publishRemoteDeviceUpdates();
+}
+
 function updateMousePosition(e) {
     // Mouse movement and held buttons
     device_change_info["delta_devices"][0] += e.movementX;
     device_change_info["delta_devices"][1] += e.movementY;
     // send_data = new Int8Array([0, e.movementX, e.movementY, 0, e.buttons]);
     // data_channel.send(send_data)
-    updateKeyPresses("MOUSE_LEFT",   (e.buttons>>0) & 1)
-    updateKeyPresses("MOUSE_RIGHT",  (e.buttons>>1) & 1)
-    updateKeyPresses("MOUSE_MIDDLE", (e.buttons>>2) & 1)
+    updateKeyPresses("MOUSE_LEFT",   (e.buttons>>0) & 1 >0)
+    updateKeyPresses("MOUSE_RIGHT",  (e.buttons>>1) & 1 >0)
+    updateKeyPresses("MOUSE_MIDDLE", (e.buttons>>2) & 1 >0)
+
+    e?.preventDefault?.();
+    return false;
 }
 function updateMouseWheel(e) {
     // Mouse movement and held buttons
     // send_data = new Int8Array([0, 0, 0, -e.deltaY/120, 0]);
-    device_change_info["delta_devices"][2] += (-e.deltaY/120);
+    device_change_info["delta_devices"][2] += -e.deltaY;
     
     // data_channel.send(send_data)
 }
-function updateKeyPresses_U(e) {return updateKeyPresses(e.code, false)}
-function updateKeyPresses_D(e) {return updateKeyPresses(e.code, true)}
+function updateKeyPresses_U(e) {updateKeyPresses(e.code, false); e?.preventDefault?.(); return false;}
+function updateKeyPresses_D(e) {updateKeyPresses(e.code, true); e?.preventDefault?.(); return false;}
 function updateKeyPresses(c, pressed) {
     if (!window?.key_mapping?.[c]) return;
     if (device_change_info.current_buttons_status[c] == pressed) return;

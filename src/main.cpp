@@ -213,6 +213,27 @@ T read_le_from_vec(const std::vector<std::byte>& buf, std::size_t offset) {
 
 
 
+std::string find_event_node(const std::string& sysfs_input_path)
+{
+    DIR *dir = opendir(sysfs_input_path.c_str());
+    if (!dir)
+        throw std::runtime_error("opendir failed");
+
+    struct dirent *ent;
+    while ((ent = readdir(dir)) != nullptr) {
+        if (strncmp(ent->d_name, "event", 5) == 0) {
+            std::string path = "/dev/input/";
+            path += ent->d_name;
+            closedir(dir);
+            return path;
+        }
+    }
+
+    closedir(dir);
+    throw std::runtime_error("no event node found");
+}
+
+
 static bool setup_uinput(stateData *data) {
     data->uinput_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
     if (data->uinput_fd < 0) {
@@ -223,16 +244,33 @@ static bool setup_uinput(stateData *data) {
     IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_RELBIT, REL_X));
     IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_RELBIT, REL_Y));
 
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_RELBIT, REL_WHEEL));
+    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_RELBIT, REL_WHEEL_HI_RES));
 
 
     IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_EVBIT, EV_SYN));
 
-
     IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_EVBIT, EV_KEY));
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_KEYBIT, BTN_LEFT));
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_KEYBIT, BTN_RIGHT));
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_KEYBIT, BTN_MIDDLE));
+    // IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_KEYBIT, BTN_LEFT));
+    // IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_KEYBIT, BTN_RIGHT));
+    // IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_KEYBIT, BTN_MIDDLE));
+
+    // Generated via JSON.stringify(Object.values(window.key_mapping)), will be the only usable keys. 
+    auto buttons_to_bind = {
+        2,3,4,5,6,7,8,9,10,11,16,17,18,19,20,21,22,23,24,25,30,31,32,33,
+        34,35,36,37,38,44,45,46,47,48,49,50,103,105,106,108,1,12,13,14,
+        15,26,27,28,29,39,40,41,42,43,51,52,53,54,56,57,58,59,60,61,62,
+        63,64,65,66,67,68,87,88,69,70,55,71,72,73,74,75,76,77,78,79,80,
+        81,82,83,96,97,98,100,102,104,107,109,110,111,272,273,274
+    };
+    for (uint16_t button: buttons_to_bind) {
+        // printf("IOCTL CALL FOR %d\n", button);
+        IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_KEYBIT, button));
+    }
+
+    // printf("PLEASEASESAE CALL FOR %d\n", BTN_LEFT);
+    // printf("PLEASEASESAE CALL FOR %d\n", BTN_RIGHT);
+    // printf("PLEASEASESAE CALL FOR %d\n", BTN_MIDDLE);
+
 
     
 
@@ -246,6 +284,13 @@ static bool setup_uinput(stateData *data) {
 
     IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_DEV_SETUP, &usetup));
     IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_DEV_CREATE));
+
+    char sysfs_device_name[16];
+    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_GET_SYSNAME(sizeof(sysfs_device_name)), sysfs_device_name));
+    std::string device_name = std::string(sysfs_device_name);
+    std::string dev_event_id = find_event_node("/sys/devices/virtual/input/"+device_name);
+    std::cout << "Created device: "+dev_event_id <<std::endl;
+    // printf("Connected with the device: %s\n", sysfs_device_name, );
 
     return true;
 }
@@ -287,7 +332,7 @@ static void recive_data_message(stateData *data, rtc::message_variant recived) {
         // printf("Mouse movement: %d, %d, %d\n", x_movement, y_movement, scroll_movement);
         emit_uinput(data->uinput_fd, EV_REL, REL_X, x_movement);
         emit_uinput(data->uinput_fd, EV_REL, REL_Y, y_movement);
-        emit_uinput(data->uinput_fd, EV_REL, REL_WHEEL, scroll_movement);
+        emit_uinput(data->uinput_fd, EV_REL, REL_WHEEL_HI_RES, scroll_movement);
         for (int i=7; i<bin_data.size(); i+=2) {
             // EV_KEY
             auto data_byte = read_le_from_vec<uint16_t>(bin_data,i);
