@@ -250,9 +250,7 @@ static bool setup_uinput(stateData *data) {
     IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_EVBIT, EV_SYN));
 
     IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_EVBIT, EV_KEY));
-    // IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_KEYBIT, BTN_LEFT));
-    // IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_KEYBIT, BTN_RIGHT));
-    // IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_KEYBIT, BTN_MIDDLE));
+    
 
     // Generated via JSON.stringify(Object.values(window.key_mapping)), will be the only usable keys. 
     auto buttons_to_bind = {
@@ -263,20 +261,16 @@ static bool setup_uinput(stateData *data) {
         81,82,83,96,97,98,100,102,104,107,109,110,111,272,273,274
     };
     for (uint16_t button: buttons_to_bind) {
-        // printf("IOCTL CALL FOR %d\n", button);
         IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_KEYBIT, button));
     }
 
-    // printf("PLEASEASESAE CALL FOR %d\n", BTN_LEFT);
-    // printf("PLEASEASESAE CALL FOR %d\n", BTN_RIGHT);
-    // printf("PLEASEASESAE CALL FOR %d\n", BTN_MIDDLE);
 
 
     
 
 
     struct uinput_setup usetup = {0};
-    // memset(usetup, 0, sizeof(usetup));
+    
     usetup.id.bustype = BUS_USB;
     usetup.id.vendor = 0x1234;
     usetup.id.product = 0x5678;
@@ -289,8 +283,7 @@ static bool setup_uinput(stateData *data) {
     IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_GET_SYSNAME(sizeof(sysfs_device_name)), sysfs_device_name));
     std::string device_name = std::string(sysfs_device_name);
     std::string dev_event_id = find_event_node("/sys/devices/virtual/input/"+device_name);
-    std::cout << "Created device: "+dev_event_id <<std::endl;
-    // printf("Connected with the device: %s\n", sysfs_device_name, );
+    std::cout << "Created device: "+dev_event_id << std::endl;
 
     return true;
 }
@@ -319,37 +312,25 @@ static void recive_data_message(stateData *data, rtc::message_variant recived) {
     if (bin_data.size() < 1) return;
     auto type_selected = read_le_from_vec<int8_t>(bin_data, 0);
 
-    // for (const std::byte& b : bin_data) {
-    //     std::cout << "0x" << std::hex << +std::to_integer<uint8_t>(b) << " ";  // "+" is used to convert std::byte to an integer
-    // }
-    // std::cout << std::endl;
 
     if (bin_data.size() >= 6 && type_selected == 0) {
         int16_t x_movement = read_le_from_vec<int16_t>(bin_data,1);
         int16_t y_movement = read_le_from_vec<int16_t>(bin_data,3);
         int16_t scroll_movement = read_le_from_vec<int16_t>(bin_data,5);
-        // int8_t mouse_buttons = std::to_integer<int8_t>(bin_data.at(4));
-        // printf("Mouse movement: %d, %d, %d\n", x_movement, y_movement, scroll_movement);
+
         emit_uinput(data->uinput_fd, EV_REL, REL_X, x_movement);
         emit_uinput(data->uinput_fd, EV_REL, REL_Y, y_movement);
         emit_uinput(data->uinput_fd, EV_REL, REL_WHEEL_HI_RES, scroll_movement);
         for (int i=7; i<bin_data.size(); i+=2) {
             // EV_KEY
             auto data_byte = read_le_from_vec<uint16_t>(bin_data,i);
-            // auto info_byte = read_le_from_vec<uint8_t>(bin_data,i+1);
             bool pressed = ((data_byte&0x1000)>0);
 
             emit_uinput(data->uinput_fd, EV_KEY, data_byte&0xFFF, pressed);
-            // printf("Pressed / released button: %d, (%d) : %d\n", data_byte&0xFFF, pressed, data_byte);
         }
 
         emit_uinput(data->uinput_fd, EV_SYN, SYN_REPORT, 0);
     }
-
-
-
-    //  x_movement
-    // printf("Test: %d, %d\n", x_movement, y_movement);
 }
 
 static void setup_RTC(stateData *data) {
