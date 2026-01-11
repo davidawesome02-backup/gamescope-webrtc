@@ -14,7 +14,7 @@ include_directories(${PIPEWIRE_INCLUDE_DIRS})
 link_directories(${PIPEWIRE_LIBRARY_DIRS})
 
 
-add_executable(gamescope-webrtc main.cpp uinput_helper.cpp)
+add_executable(gamescope-webrtc main.cpp uinput_helper.cpp recording.cpp webrtc.cpp)
 
 set_target_properties(gamescope-webrtc PROPERTIES
     CXX_STANDARD 17

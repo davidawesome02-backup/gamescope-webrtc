@@ -50,11 +50,12 @@ static std::string find_event_node(const std::string& sysfs_input_path)
 }
 
 
-bool setup_uinput(stateData *data) {
+std::string setup_uinput(stateData *data) {
     data->uinput_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
     if (data->uinput_fd < 0) {
         perror("Damn no uinput");
-        return false;
+        // return false;
+        throw std::runtime_error("No uinput ability");
     }
     IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_EVBIT, EV_REL));
     IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_RELBIT, REL_X));
@@ -97,7 +98,8 @@ bool setup_uinput(stateData *data) {
     std::string dev_event_id = find_event_node("/sys/devices/virtual/input/"+device_name);
     std::cout << "Created device: "+dev_event_id << std::endl;
 
-    return true;
+    // return true;
+    return dev_event_id;
 }
 
 static void emit_uinput(int fd, int type, int code, int val)

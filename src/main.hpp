@@ -4,10 +4,6 @@
 #include <spa/debug/types.h>
 #include <spa/param/video/type-info.h>
 
-#include <pipewire/pipewire.h>
-
-#include "rtc/rtc.hpp"
-#include <nlohmann/json.hpp>
 #include <chrono>
 #include <thread>
 #include <iostream>
@@ -17,6 +13,9 @@
 #include <cstring>
 #include <atomic>
 #include <csignal>
+
+#include <pipewire/pipewire.h>
+
 
 // FFmpeg
 extern "C" {
@@ -31,7 +30,14 @@ extern "C" {
 #include <fcntl.h>
 }
 
+#include "rtc/rtc.hpp"
 
+#include <vector>
+
+
+
+const uint32_t SSRC = 42;
+const int RTP_MTU = 1200;
 
 
 
@@ -80,3 +86,4 @@ static T read_le_from_vec(const std::vector<std::byte>& buf, std::size_t offset)
 
 
 #include <uinput_helper.hpp>
+#include <webrtc.hpp>
