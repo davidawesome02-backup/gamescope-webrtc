@@ -99,6 +99,7 @@ std::string setup_uinput(stateData *data) {
     std::cout << "Created device: "+dev_event_id << std::endl;
 
     // return true;
+    // data->uinput_event = dev_event_id;
     return dev_event_id;
 }
 

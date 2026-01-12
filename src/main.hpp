@@ -33,6 +33,7 @@ extern "C" {
 #include "rtc/rtc.hpp"
 
 #include <vector>
+#include <filesystem>
 
 
 
@@ -70,6 +71,10 @@ typedef struct {
         AVCodecContext *encCtx;
 
         int uinput_fd;
+        std::vector<std::string> input_bind_paths;
+        // std::string uinput_event;
+
+        std::filesystem::path base_overlay_path;
 } stateData;
 
 
@@ -87,3 +92,4 @@ static T read_le_from_vec(const std::vector<std::byte>& buf, std::size_t offset)
 
 #include <uinput_helper.hpp>
 #include <webrtc.hpp>
+#include <game_launch.hpp>
