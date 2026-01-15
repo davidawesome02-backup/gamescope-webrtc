@@ -70,7 +70,8 @@ typedef struct {
         AVFormatContext *rtpFmt;
         AVCodecContext *encCtx;
 
-        int uinput_fd;
+        int uinput_kbm_fd;
+        int uinput_crl_fd;
         std::vector<std::string> input_bind_paths;
         // std::string uinput_event;
 
@@ -92,4 +93,3 @@ static T read_le_from_vec(const std::vector<std::byte>& buf, std::size_t offset)
 
 #include <uinput_helper.hpp>
 #include <webrtc.hpp>
-#include <game_launch.hpp>

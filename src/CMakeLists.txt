@@ -14,11 +14,13 @@ include_directories(${PIPEWIRE_INCLUDE_DIRS})
 link_directories(${PIPEWIRE_LIBRARY_DIRS})
 
 
-add_executable(gamescope-webrtc main.cpp uinput_helper.cpp recording.cpp webrtc.cpp game_launch.cpp)
+add_executable(gamescope-webrtc main.cpp uinput_helper.cpp recording.cpp webrtc.cpp)
+
 
 set_target_properties(gamescope-webrtc PROPERTIES
     CXX_STANDARD 17
     OUTPUT_NAME gamescope-webrtc)
+
 
 #set_target_properties(gamescope-webrtc PROPERTIES
 #	XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER com.github.paullouisageneau.libdatachannel.examples.media-sender)
@@ -32,3 +34,25 @@ target_include_directories(gamescope-webrtc PRIVATE . ${FFMPEG_INCLUDE_DIRS} ${P
 
 # Propagate pkg-config cflags to the target (safe) 
 target_compile_options(gamescope-webrtc PRIVATE ${FFMPEG_CFLAGS_OTHER} ${PIPEWIRE_CFLAGS_OTHER})
+
+
+
+add_library(gamescope-webrtc-lib lib.cpp uinput_helper.cpp recording.cpp webrtc.cpp)
+
+set_target_properties(gamescope-webrtc-lib PROPERTIES
+    CXX_STANDARD 17
+    OUTPUT_NAME gamescope-webrtc-lib
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN YES
+    POSITION_INDEPENDENT_CODE ON
+)
+
+target_link_libraries(gamescope-webrtc-lib LibDataChannel::LibDataChannel Threads::Threads ${FFMPEG_LIBRARIES} ${PIPEWIRE_LIBRARIES})
+
+# Add include dirs for the project (if you keep a local include folder) 
+target_include_directories(gamescope-webrtc-lib PRIVATE . ${FFMPEG_INCLUDE_DIRS} ${PIPEWIRE_INCLUDE_DIRS}) 
+
+# Propagate pkg-config cflags to the target (safe) 
+target_compile_options(gamescope-webrtc-lib PRIVATE ${FFMPEG_CFLAGS_OTHER} ${PIPEWIRE_CFLAGS_OTHER})
+
+target_include_directories(gamescope-webrtc-lib PUBLIC ./lib.h) # Define external libs.

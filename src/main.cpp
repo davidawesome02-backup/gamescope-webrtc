@@ -20,14 +20,14 @@ int main(int argc, char *argv[]) {
         data.fps = 60;
 
 
-        // setup_RTC(&data);
-        // std::string fake_input_path = setup_uinput(&data);
-        // data.input_bind_paths.push_back(fake_input_path);
+        setup_RTC(&data);
+        std::string fake_input_path = setup_uinput_keyboard_mouse(&data);
+        data.input_bind_paths.push_back(fake_input_path);
 
-        spawn_container_and_game(&data);
+        // spawn_container_and_game(&data);
 
-        // prepare_recording(&data, argc, argv);
-        // start_recording(&data);
+        prepare_recording(&data, argc, argv);
+        start_recording(&data);
 
 // pw_main_loop_run
 
