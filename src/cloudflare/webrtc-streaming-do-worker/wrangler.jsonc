@@ -1,0 +1,24 @@
+{
+  // Basic configuration
+  "name": "webrtc-streaming-do-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-09-27",
+
+  // Durable Objects configuration
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RTC_FW_DO_WORKER",
+        "class_name": "RtcForwardDO"
+      }
+    ]
+  },
+
+  // Migrations
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": ["RtcForwardDO"]
+    }
+  ]
+}
