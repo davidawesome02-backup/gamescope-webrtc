@@ -50,23 +50,23 @@ static std::string find_event_node(const std::string& sysfs_input_path)
 }
 
 
-std::string setup_uinput(stateData *data) {
-    data->uinput_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
-    if (data->uinput_fd < 0) {
+std::string setup_uinput_keyboard_mouse(stateData *data) {
+    data->uinput_kbm_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
+    if (data->uinput_kbm_fd < 0) {
         perror("Damn no uinput");
         // return false;
         throw std::runtime_error("No uinput ability");
     }
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_EVBIT, EV_REL));
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_RELBIT, REL_X));
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_RELBIT, REL_Y));
+    IOCTL_WRAPPER(ioctl(data->uinput_kbm_fd, UI_SET_EVBIT, EV_REL));
+    IOCTL_WRAPPER(ioctl(data->uinput_kbm_fd, UI_SET_RELBIT, REL_X));
+    IOCTL_WRAPPER(ioctl(data->uinput_kbm_fd, UI_SET_RELBIT, REL_Y));
 
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_RELBIT, REL_WHEEL_HI_RES));
+    IOCTL_WRAPPER(ioctl(data->uinput_kbm_fd, UI_SET_RELBIT, REL_WHEEL_HI_RES));
 
 
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_EVBIT, EV_SYN));
+    IOCTL_WRAPPER(ioctl(data->uinput_kbm_fd, UI_SET_EVBIT, EV_SYN));
 
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_EVBIT, EV_KEY));
+    IOCTL_WRAPPER(ioctl(data->uinput_kbm_fd, UI_SET_EVBIT, EV_KEY));
     
 
     // Generated via JSON.stringify(Object.values(window.key_mapping)), will be the only usable keys. 
@@ -78,7 +78,7 @@ std::string setup_uinput(stateData *data) {
         81,82,83,96,97,98,100,102,104,107,109,110,111,272,273,274
     };
     for (uint16_t button: buttons_to_bind) {
-        IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_SET_KEYBIT, button));
+        IOCTL_WRAPPER(ioctl(data->uinput_kbm_fd, UI_SET_KEYBIT, button));
     }
 
 
@@ -89,17 +89,15 @@ std::string setup_uinput(stateData *data) {
     usetup.id.product = 0x5678;
     strcpy(usetup.name, "Example dev!");
 
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_DEV_SETUP, &usetup));
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_DEV_CREATE));
+    IOCTL_WRAPPER(ioctl(data->uinput_kbm_fd, UI_DEV_SETUP, &usetup));
+    IOCTL_WRAPPER(ioctl(data->uinput_kbm_fd, UI_DEV_CREATE));
 
     char sysfs_device_name[16];
-    IOCTL_WRAPPER(ioctl(data->uinput_fd, UI_GET_SYSNAME(sizeof(sysfs_device_name)), sysfs_device_name));
+    IOCTL_WRAPPER(ioctl(data->uinput_kbm_fd, UI_GET_SYSNAME(sizeof(sysfs_device_name)), sysfs_device_name));
     std::string device_name = std::string(sysfs_device_name);
     std::string dev_event_id = find_event_node("/sys/devices/virtual/input/"+device_name);
     std::cout << "Created device: "+dev_event_id << std::endl;
 
-    // return true;
-    // data->uinput_event = dev_event_id;
     return dev_event_id;
 }
 
@@ -127,17 +125,17 @@ void process_remote_message(stateData *data, std::vector<std::byte> bin_data) {
         int16_t y_movement = read_le_from_vec<int16_t>(bin_data,3);
         int16_t scroll_movement = read_le_from_vec<int16_t>(bin_data,5);
 
-        emit_uinput(data->uinput_fd, EV_REL, REL_X, x_movement);
-        emit_uinput(data->uinput_fd, EV_REL, REL_Y, y_movement);
-        emit_uinput(data->uinput_fd, EV_REL, REL_WHEEL_HI_RES, scroll_movement);
+        emit_uinput(data->uinput_kbm_fd, EV_REL, REL_X, x_movement);
+        emit_uinput(data->uinput_kbm_fd, EV_REL, REL_Y, y_movement);
+        emit_uinput(data->uinput_kbm_fd, EV_REL, REL_WHEEL_HI_RES, scroll_movement);
         for (int i=7; i<bin_data.size(); i+=2) {
             // EV_KEY
             auto data_byte = read_le_from_vec<uint16_t>(bin_data,i);
             bool pressed = ((data_byte&0x1000)>0);
 
-            emit_uinput(data->uinput_fd, EV_KEY, data_byte&0xFFF, pressed);
+            emit_uinput(data->uinput_kbm_fd, EV_KEY, data_byte&0xFFF, pressed);
         }
 
-        emit_uinput(data->uinput_fd, EV_SYN, SYN_REPORT, 0);
+        emit_uinput(data->uinput_kbm_fd, EV_SYN, SYN_REPORT, 0);
     }
 }

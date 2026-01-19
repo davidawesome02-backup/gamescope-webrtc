@@ -1,5 +1,4 @@
-#ifndef MYLIB_H
-#define MYLIB_H
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -17,11 +16,14 @@ extern "C" {
 // void myobject_set_value(MyObject* obj, int value);
 
 typedef struct {
-    int test;
+    char* crl_path;
+    char* kbm_path;
+
+    void* opaque_internal_ctx;
 } gamescopeWebrtcCtx;
+
+gamescopeWebrtcCtx* gamescopeWebrtc_INIT(bool, bool);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif // MYLIB_H

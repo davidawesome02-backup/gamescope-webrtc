@@ -24,7 +24,7 @@ static void recive_data_message(stateData *data, rtc::message_variant recived) {
     if (!std::holds_alternative<rtc::binary>(recived)) return;
     auto bin_data = std::get<rtc::binary>(recived);
     
-    if (!(data->uinput_fd >= 0)) return;
+    if (!(data->uinput_kbm_fd >= 0)) return;
 
     if (bin_data.size() < 1) return;
     auto type_selected = read_le_from_vec<int8_t>(bin_data, 0);

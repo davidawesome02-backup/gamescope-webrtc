@@ -72,10 +72,6 @@ typedef struct {
 
         int uinput_kbm_fd;
         int uinput_crl_fd;
-        std::vector<std::string> input_bind_paths;
-        // std::string uinput_event;
-
-        std::filesystem::path base_overlay_path;
 } stateData;
 
 

@@ -297,23 +297,51 @@ static const struct pw_stream_events stream_events = {
 
 
 
+static void registry_event_global(void *data_raw,
+                                  uint32_t id,
+                                  uint32_t permissions,
+                                  const char *type,
+                                  uint32_t version,
+                                  const struct spa_dict *props)
+{
+    std::cout << "Offered: " << id << std::endl;
+    if (strcmp(type, PW_TYPE_INTERFACE_Node) != 0)
+        return;
 
-void prepare_recording(stateData *data, int argc, char *argv[]) {
+    const char *pid_str = spa_dict_lookup(props, "client.pid");
+    if (!pid_str)
+        return;
 
+    pid_t pid = atoi(pid_str);
 
+    stateData *data = (stateData *)data_raw;
+
+    // if (is_child_of_target(pid)) {
+    //     // store node.id
+    //     // connect stream to THIS node
+    // }
+    std::cout << "Offered client pid: " << pid << std::endl;
+}
+
+static const struct pw_registry_events registry_events = {
+    PW_VERSION_REGISTRY_EVENTS,
+    .global = registry_event_global,
+    // .global_remove = registry_global_remove,
+};
+
+void prepare_recording(stateData *data, int targetPid) {
         const struct spa_pod *params[1];
         uint8_t buffer[1024];
         struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
         struct pw_properties *props;
 
-        pw_init(&argc, &argv);
+
+        pw_init(nullptr, nullptr);
 
         data->loop = pw_main_loop_new(NULL);
 
         props = pw_properties_new(PW_KEY_MEDIA_TYPE, "Video",
                         NULL);
-        if (argc > 1)
-                pw_properties_set(props, PW_KEY_TARGET_OBJECT, argv[1]);
 
         data->stream = pw_stream_new_simple(
                         pw_main_loop_get_loop(data->loop),
@@ -345,15 +373,42 @@ void prepare_recording(stateData *data, int argc, char *argv[]) {
                                                 &default_framerate,
                                                 &min_framerate,
                                                 &max_framerate));
+        
+        if (targetPid > 0) {
+            pw_context *context = pw_context_new(
+                pw_main_loop_get_loop(data->loop),
+                nullptr, 0);
+            if (!context) {
+                std::cerr << "Failed to create context\n";
+                return;// 1;
+            }
 
-        int re = pw_stream_connect(data->stream,
-                          PW_DIRECTION_INPUT,
-                          PW_ID_ANY,
-                        //   147,
-                          (enum pw_stream_flags) (PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS),
-                          params, 1);
-        printf("Hi me! GH, %d\n", re);
+            pw_core *core = pw_context_connect(context, nullptr, 0);
+            if (!core) {
+                std::cerr << "Failed to connect core\n";
+                return;// 1;
+            }
 
+            // 5. Get registry
+            pw_registry *registry = pw_core_get_registry(core, PW_VERSION_REGISTRY, 0);
+
+            // 6. Add listener
+            spa_hook registry_listener;
+            // pw_registry_add_listener(registry,
+            //                         &registry_listener,
+            //                         &registry_events,
+            //                         nullptr);
+
+            pw_registry_add_listener(registry, &registry_listener, &registry_events, data);
+            std::cout << "Should be listening ??" << std::endl;
+        } else {
+            int re = pw_stream_connect(data->stream,
+                            PW_DIRECTION_INPUT,
+                            PW_ID_ANY,
+                            (enum pw_stream_flags) (PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS),
+                            params, 1);
+            printf("Hi me! GH, %d\n", re);
+        }
 
         #if send_instantly
         #else

@@ -4,4 +4,4 @@
 #include <webrtc.hpp>
 
 void start_recording(stateData*);
-void prepare_recording(stateData *data, int argc, char *argv[]);
+void prepare_recording(stateData *data, int targetPid);
