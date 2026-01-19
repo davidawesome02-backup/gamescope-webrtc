@@ -32,9 +32,9 @@ function random_b32(): string {
 }
 function normalize_b32(b32_raw: string): string {
 	b32_raw = b32_raw.toUpperCase()
-					 .replaceAll("O","0")
-					 .replaceAll("i","1")
-					 .replaceAll("l","1")
+					 .replaceAll("0","O")
+					 .replaceAll("1","i")
+					//  .replaceAll("1","l")
 					 .replaceAll("s","5");
 	let alph = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 
@@ -59,12 +59,14 @@ export async function onRequest(ctx: EventContext<Env, string, Record<string, un
 		// If there is one, accept the request and return a WebSocket Response.
 		const upgradeHeader = request.headers.get('Upgrade');
 		if (!upgradeHeader || upgradeHeader !== 'websocket') {
+			console.log("Not a websocket con");
 			return new Response('Worker expected Upgrade: websocket', {
 			status: 426,
 			});
 		}
 
 		if (request.method !== 'GET') {
+			console.log("Method not GET");
 			return new Response('Worker expected GET method', {
 			status: 400,
 			});
@@ -79,6 +81,7 @@ export async function onRequest(ctx: EventContext<Env, string, Record<string, un
 		// Client A: create new session
 		if (!code) {
 			if (!offer) {
+				console.log("No offer for setting request: "+ code);
 				return new Response('No offer found for opening request!', {
 					status: 400,
 				});
@@ -88,6 +91,7 @@ export async function onRequest(ctx: EventContext<Env, string, Record<string, un
 		} else {
 			code = normalize_b32(code);
 			if (code.length != CODE_LENGTH) {
+				console.log("Code too short: "+ code);
 				return new Response('Invalid code.', {
 					status: 400,
 				});

@@ -66,12 +66,14 @@ export class RtcForwardDO extends DurableObject {
 			console.log(`Created new code: ${forwareded_data.code}`)
 		} else {
 			if (!await this.ctx.storage.get("initalized")) {
+				console.log("Rec invalid code: "+ forwareded_data.code);
 				return new Response('This code is not valid!', {
 					status: 400,
 				});
 			}
 			let offer = await this.ctx.storage.get("offer");
 			if (!offer) {
+				console.log("Offer not found for code: "+ forwareded_data.code);
 				return new Response('Offer not found!', {
 					status: 400,
 				});
@@ -135,6 +137,7 @@ export class RtcForwardDO extends DurableObject {
 		this.sessions.delete(ws);
 		ws.close(code, 'Durable Object is closing WebSocket');
 		console.log("Ws closed!")
+		if (this.sessions.size == 0) this.cleanup("All ws dead");
 	}
 
 	async alarm() {

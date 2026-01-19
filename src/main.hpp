@@ -72,6 +72,8 @@ typedef struct {
 
         int uinput_kbm_fd;
         int uinput_crl_fd;
+
+        std::shared_ptr<rtc::WebSocket> connection_open_socket;
 } stateData;
 
 
