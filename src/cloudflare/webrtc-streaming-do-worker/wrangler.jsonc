@@ -13,12 +13,19 @@
       }
     ]
   },
+  "observability": {
+		"enabled": true,
+		"logs": {
+			"enabled": true,
+			"invocation_logs": true
+		}
+	},
 
   // Migrations
   "migrations": [
     {
       "tag": "v1",
-      "new_classes": ["RtcForwardDO"]
+      "new_sqlite_classes": ["RtcForwardDO"]
     }
   ]
 }

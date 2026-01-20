@@ -6,14 +6,23 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "webrtc-streaming-pages",
 	"compatibility_date": "2025-09-27",
-	"assets": {
-		// The path to the directory containing the `index.html` file to be served at `/`
-		"directory": "./public"
-	},
-  	"pages_build_output_dir": ".",
+	// "assets": {
+	// 	// The path to the directory containing the `index.html` file to be served at `/`
+	// 	"directory": "./public"
+	// },
+  	"pages_build_output_dir": "./public",
 	"observability": {
 		"enabled": true
-	}
+	},
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "RTC_FW_DO_WORKER",
+				"class_name": "RtcForwardDO",
+				"script_name": "webrtc-streaming-do-worker"
+			}
+		]
+	},
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

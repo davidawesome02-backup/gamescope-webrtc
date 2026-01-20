@@ -8,10 +8,13 @@ export class RtcForwardDO extends DurableObject {
 	// Keeps track of all WebSocket connections
 	// When the DO hibernates, gets reconstructed in the constructor
 	sessions: Map<WebSocket, { [key: string]: string }>;
+	store: StateStore;
+
 
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
 		this.sessions = new Map();
+		this.store = new StateStore(ctx);
 
 		// As part of constructing the Durable Object,
 		// we wake up any hibernating WebSockets and
@@ -54,32 +57,39 @@ export class RtcForwardDO extends DurableObject {
 		} = JSON.parse(request.headers.get("XF_FORWARDED_DATA")!);
 		
 		if (forwareded_data.is_opener) {
-			await this.ctx.storage.put({
-				"initalized": true,
-				"connection_code": forwareded_data.code,
-				"offer": forwareded_data.offer
-			});
+			// await this.ctx.storage.put({
+			// 	"initalized": true,
+			// 	"connection_code": forwareded_data.code,
+			// 	"offer": forwareded_data.offer
+			// });
+			this.store.setInitialState(
+				forwareded_data.code,
+				forwareded_data.offer
+			);
 
 			await this.ctx.storage.setAlarm(Date.now()+TTL_MS);
 
 			server.send(JSON.stringify({"type": "code", code: forwareded_data.code}));
 			console.log(`Created new code: ${forwareded_data.code}`)
 		} else {
-			if (!await this.ctx.storage.get("initalized")) {
+			const state = this.store.getState();
+			// if (!await this.ctx.storage.get("initalized")) {
+			if (!state?.initialized) {
 				console.log("Rec invalid code: "+ forwareded_data.code);
 				return new Response('This code is not valid!', {
 					status: 400,
 				});
 			}
-			let offer = await this.ctx.storage.get("offer");
-			if (!offer) {
+			// let offer = await this.ctx.storage.get("offer");
+			// if (!offer) {
+			if (!state.offer) {
 				console.log("Offer not found for code: "+ forwareded_data.code);
 				return new Response('Offer not found!', {
 					status: 400,
 				});
 			}
 
-			server.send(JSON.stringify({ "type":"offer", offer }));
+			server.send(JSON.stringify({ "type":"offer", offer: state.offer }));
 			console.log(`Sent client offer for code: ${forwareded_data.code}`)
 		}
 
@@ -145,7 +155,9 @@ export class RtcForwardDO extends DurableObject {
 	}
 
 	async cleanup(reason: string) {
-		let connection_code = await this.ctx.storage.get('connection_code');
+		const state = this.store.getState();
+		let connection_code = state?.connection_code
+		//await this.ctx.storage.get('connection_code');
 		console.log(`Cleaning up DO (${connection_code}): ${reason}`);
 
 		// Close all sockets
@@ -158,10 +170,62 @@ export class RtcForwardDO extends DurableObject {
 		this.sessions.clear();
 
 		// Delete ALL persisted storage (this is what stops billing)
-		await this.ctx.storage.deleteAll();
+		// await this.ctx.storage.deleteAll();
+		this.store.clear();
 		await this.ctx.storage.deleteAlarm();
 	}
 
 
 }
+
+
+class StateStore {
+  db: SqlStorage;
+
+  constructor(ctx: DurableObjectState) {
+    this.db = ctx.storage.sql;
+
+    // Initialize schema
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS state (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        initialized INTEGER NOT NULL,
+        connection_code TEXT,
+        offer TEXT
+      );
+    `);
+  }
+
+  setInitialState(code: string, offer: string | null) {
+    this.db.exec(
+      `
+      INSERT OR REPLACE INTO state (id, initialized, connection_code, offer)
+      VALUES (1, 1, ?, ?)
+      `,
+      code, offer
+    );
+  }
+
+  getState(): {
+    initialized: boolean;
+    connection_code: string | null;
+    offer: string | null;
+  } | null {
+    const cursor = this.db.exec(`SELECT * FROM state WHERE id = 1`);
+    const row = cursor.next()?.value;
+    if (!row) return null;
+
+    return {
+      initialized: !!row.initialized,
+      connection_code: row.connection_code as string|null,
+      offer: row.offer as string|null,
+    };
+  }
+
+  clear() {
+    this.db.exec(`DELETE FROM state`);
+  }
+}
+
+
 export default {};

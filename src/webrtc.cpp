@@ -110,7 +110,9 @@ void setup_RTC(stateData *data) {
             // std::cout << msg_as_b32 << std::endl;
             // std::cout << "hi me asdasd asd " << std::endl;
 
-            std::string url = "ws://localhost:7777/websocket?offer="+msg_as_b32;
+            std::string url_base = "wss://webrtc-streaming-pages.pages.dev/websocket";//"localhost:7777/websocket";
+            std::string url = url_base+"?offer="+msg_as_b32;
+            
             // int rtc_ws_precon = rtcCreateWebSocket(url.c_str());
             // auto test = rtc::WebSocket(url);
             data->connection_open_socket = std::make_shared<rtc::WebSocket>();
@@ -119,9 +121,6 @@ void setup_RTC(stateData *data) {
 
 
             data->connection_open_socket.get()->onMessage([pc](rtc::message_variant a){
-                // recive_data_message(data,a);
-                // pc.
-                // a.
                 if (!std::holds_alternative<std::string>(a)) return;
 
                 json container_json = json::parse(std::get<std::string>(a));
