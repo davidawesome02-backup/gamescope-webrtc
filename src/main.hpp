@@ -74,6 +74,15 @@ typedef struct {
         int uinput_crl_fd;
 
         std::shared_ptr<rtc::WebSocket> connection_open_socket;
+
+
+
+        spa_hook registry_listener;
+        spa_hook core_listener;
+        int pw_target_search_pid;
+        int pw_target_client_id;
+        int pw_target_id;
+        const struct spa_pod *pw_target_connect_helper_params[1];
 } stateData;
 
 

@@ -8,7 +8,7 @@ int rtp_avio_write(void *opaque, const uint8_t *buf, int buf_size) {
     try {
         auto *track = reinterpret_cast<rtc::Track *>(opaque);
         // printf("Would have writen %d\n", buf_size);
-        if (track->isOpen())
+        if (track && track->isOpen())
             track->send(reinterpret_cast<const std::byte *>(buf), buf_size);
     }
     catch (const std::runtime_error& e) {

@@ -213,6 +213,7 @@ static void on_process(void *userdata) {
         }
 
         if (data->width == 0) {
+            std::cout << "TODO FIX: Zero width process?" << std::endl;
             pw_stream_queue_buffer(data->stream, b);
             return;
         };
@@ -222,6 +223,7 @@ static void on_process(void *userdata) {
 
         if (!spa_buffer || !spa_buffer->datas[0].data) {
             // Return the buffer to the stream and exit
+            std::cout << "TODO FIX: No data supplied?" << std::endl;
             pw_stream_queue_buffer(data->stream, b);
             return;
         }
@@ -231,6 +233,8 @@ static void on_process(void *userdata) {
         int stride = data->real_width * 4;
 
         int just_cleared = false;
+
+        std::cout << "TODO FIX: ABOUT TO CHECK FOR FREE" << std::endl;
 
         // Allocate latest_frame if needed
         if (data->latest_frame && (data->latest_frame->width != data->width || data->latest_frame->height != data->height)) {
@@ -296,6 +300,15 @@ static const struct pw_stream_events stream_events = {
 };
 
 
+void print_spa_dict(const struct spa_dict *props) {
+    if (!props) {
+        std::cout << "\t\t\t[spa_dict] (null)\n";
+        return;
+    }
+    for (uint32_t i = 0; i < props->n_items; ++i) {
+        std::cout << "\t\t\t" << props->items[i].key << " = " << props->items[i].value << std::endl;
+    }
+}
 
 static void registry_event_global(void *data_raw,
                                   uint32_t id,
@@ -304,23 +317,95 @@ static void registry_event_global(void *data_raw,
                                   uint32_t version,
                                   const struct spa_dict *props)
 {
-    std::cout << "Offered: " << id << std::endl;
-    if (strcmp(type, PW_TYPE_INTERFACE_Node) != 0)
-        return;
-
-    const char *pid_str = spa_dict_lookup(props, "client.pid");
-    if (!pid_str)
-        return;
-
-    pid_t pid = atoi(pid_str);
+    // return;
 
     stateData *data = (stateData *)data_raw;
 
-    // if (is_child_of_target(pid)) {
-    //     // store node.id
-    //     // connect stream to THIS node
-    // }
-    std::cout << "Offered client pid: " << pid << std::endl;
+    std::cout << "\t\tOffered: " << id << std::endl;
+    print_spa_dict(props);
+
+    const char* pid = spa_dict_lookup(props, PW_KEY_SEC_PID);
+    // if (pid) std::cout << "Comparing pid: "<< pid << " to target pid: " << data->pw_target_search_pid << std::endl;
+    if (pid && atoi(pid) == data->pw_target_search_pid) {
+        data->pw_target_client_id = id;
+        std::cout << "Updated client target ID: " << id << std::endl;
+        return;
+    }
+
+    const char* client_id = spa_dict_lookup(props, PW_KEY_CLIENT_ID);
+    // if (client_id) std::cout << "Comparing client_id: "<< client_id << " to target client: " << data->pw_target_client_id << std::endl;
+    if (client_id && atoi(client_id) == data->pw_target_client_id) {
+        std::cout << "Updated target ID: " << id << std::endl;
+        const char* media_class = spa_dict_lookup(props, "media.class");
+    std::cout << "Connecting to node id: " << data->pw_target_id << " with media.class: " << (media_class ?: "(none)") << std::endl;
+        data->pw_target_id = id;
+        return;
+    }
+
+    // Offered: 73
+    //                         object.serial = 132
+    //                         module.id = 2
+    //                         pipewire.protocol = protocol-native
+    //                         pipewire.sec.pid = 515053
+    //                         pipewire.sec.uid = 1000
+    //                         pipewire.sec.gid = 1000
+    //                         pipewire.sec.socket = pipewire-0
+    //                         pipewire.access = unrestricted
+    //                         application.name = gamescope
+    // Updated client target ID: 73
+    //                 Offered: 75
+    //                         object.serial = 133
+    //                         factory.id = 9
+    //                         client.id = 73
+    //                         node.name = gamescope
+    //                         media.class = Video/Source
+    // Updated target ID: 75
+    // Offered: 77
+    //                     object.serial = 134
+    //                     object.path = gamescope:capture_0
+    //                     node.id = 75
+    //                     port.id = 0
+    //                     port.name = capture_1
+    //                     port.direction = out
+    //                     port.alias = gamescope:capture_1
+    //                     port.group = stream.0
+    return;
+
+
+
+    // print_spa_dict(props);
+
+
+    // const char *pid_strA = spa_dict_lookup(props, PW_KEY_APP_PROCESS_ID);
+    
+    // if (!pid_strA)
+    //     return;
+
+    // std::cout << "\t Has pid data A: " << pid_strA << std::endl;
+
+    // if (strcmp(type, PW_TYPE_INTERFACE_Node) != 0)
+    //     return;
+
+    // std::cout << "\t Is interface node!" << std::endl;
+    
+    // const char *pid_str = spa_dict_lookup(props, PW_KEY_CLIENT_ID);//"client.pid");
+    // // PW_KEY_CLIENT_PID
+    
+    // if (!pid_str)
+    //     return;
+
+    // std::cout << "\t Has pid data: " << pid_str << std::endl;
+
+
+    // pid_t pid = atoi(pid_str);
+
+    // stateData *data = (stateData *)data_raw;
+
+    // // if (is_child_of_target(pid)) {
+    // //     // store node.id
+    // //     // connect stream to THIS node
+    // // }
+    // std::cout << "Offered client pid: " << pid << std::endl;
 }
 
 static const struct pw_registry_events registry_events = {
@@ -329,8 +414,30 @@ static const struct pw_registry_events registry_events = {
     // .global_remove = registry_global_remove,
 };
 
+static void core_done(void *data_raw, uint32_t id, int seq)
+{
+    stateData *data = (stateData *)data_raw;
+
+
+    std::cout << "Core sync done; using stream ID: " << data->pw_target_id << std::endl;
+    if (data->pw_target_id > 0) {
+        int re = pw_stream_connect(data->stream,
+            PW_DIRECTION_INPUT,
+            data->pw_target_id,
+            (enum pw_stream_flags) (PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS),
+            data->pw_target_connect_helper_params, 1);
+    }
+    // PW_THROW_IF(data->pw_target_id == -1, "Unable to find running accessable instance of gamescope!"); // TODO - this can prob be removed
+}
+
+static const pw_core_events core_events = {
+    PW_VERSION_CORE_EVENTS,
+    .done = core_done,
+};
+
+
 void prepare_recording(stateData *data, int targetPid) {
-        const struct spa_pod *params[1];
+        // const struct spa_pod *params[1];
         uint8_t buffer[1024];
         struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
         struct pw_properties *props;
@@ -358,7 +465,7 @@ void prepare_recording(stateData *data, int targetPid) {
         struct spa_fraction max_framerate = SPA_FRACTION(1000, 1);
         struct spa_fraction default_framerate = SPA_FRACTION(data->fps, 1);
 
-        params[0] = (const struct spa_pod*) spa_pod_builder_add_object(&b,
+        *data->pw_target_connect_helper_params = (const struct spa_pod*) spa_pod_builder_add_object(&b,
                 SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
                 SPA_FORMAT_mediaType,       SPA_POD_Id(SPA_MEDIA_TYPE_video),
                 SPA_FORMAT_mediaSubtype,    SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
@@ -375,6 +482,10 @@ void prepare_recording(stateData *data, int targetPid) {
                                                 &max_framerate));
         
         if (targetPid > 0) {
+            data->pw_target_search_pid = targetPid;
+            data->pw_target_client_id = -1;
+            data->pw_target_id = -1;
+
             pw_context *context = pw_context_new(
                 pw_main_loop_get_loop(data->loop),
                 nullptr, 0);
@@ -393,20 +504,28 @@ void prepare_recording(stateData *data, int targetPid) {
             pw_registry *registry = pw_core_get_registry(core, PW_VERSION_REGISTRY, 0);
 
             // 6. Add listener
-            spa_hook registry_listener;
             // pw_registry_add_listener(registry,
             //                         &registry_listener,
             //                         &registry_events,
             //                         nullptr);
 
-            pw_registry_add_listener(registry, &registry_listener, &registry_events, data);
+
+            pw_core_add_listener(core,
+                                &data->core_listener,
+                                &core_events,
+                                data);
+
+            pw_registry_add_listener(registry, &data->registry_listener, &registry_events, data);
+            
+            pw_core_sync(core, PW_ID_CORE, 0);
+
             std::cout << "Should be listening ??" << std::endl;
         } else {
             int re = pw_stream_connect(data->stream,
                             PW_DIRECTION_INPUT,
                             PW_ID_ANY,
                             (enum pw_stream_flags) (PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS),
-                            params, 1);
+                            data->pw_target_connect_helper_params, 1);
             printf("Hi me! GH, %d\n", re);
         }
 
@@ -426,6 +545,7 @@ void prepare_recording(stateData *data, int targetPid) {
         #endif
 }
 void start_recording(stateData *data) {
+
     pw_main_loop_run(data->loop);
 
     pw_stream_destroy(data->stream);
