@@ -142,7 +142,6 @@ static void send_latest_data(stateData *data) {
 }
 
 static void send_frame_timer(void *userdata, long unsigned int a) {
-    // printf("Timer! %d\n", a);
     stateData *data = (stateData *)userdata;
 
     // Call on_process to send a frame (this could be a duplicate frame or an empty frame if no new content)
@@ -153,7 +152,11 @@ static void send_frame_timer(void *userdata, long unsigned int a) {
 
 
 static void on_param_changed(void *userdata, uint32_t id, const struct spa_pod *param) {
+
+
         stateData *data = (stateData *)userdata;
+
+
         printf("Format requested!\n");
         if (param == NULL || id != SPA_PARAM_Format) {
                 printf("\tRETURNA, %d  %p\n", id, param);
@@ -201,11 +204,9 @@ static void on_param_changed(void *userdata, uint32_t id, const struct spa_pod *
 
 /* [on_process] */
 static void on_process(void *userdata) {
-        // printf("USER DATA PROVIDED!\n");
         stateData *data = (stateData *) userdata;
         
         struct pw_buffer *b;
-        // struct spa_buffer *buf;
 
         if ((b = pw_stream_dequeue_buffer(data->stream)) == NULL) {
                 pw_log_warn("out of buffers: %m");
@@ -221,9 +222,11 @@ static void on_process(void *userdata) {
 
         auto spa_buffer = b->buffer;
 
+        // printf("got a frame of size %d type: %d\n", spa_buffer->datas[0].chunk->size, spa_buffer->datas[0].type);
         if (!spa_buffer || !spa_buffer->datas[0].data) {
             // Return the buffer to the stream and exit
-            std::cout << "TODO FIX: No data supplied?" << std::endl;
+            // Currently this fails on PID for some reason??
+            std::cout << "TODO FIX: No data supplied; type: " << std::endl;
             pw_stream_queue_buffer(data->stream, b);
             return;
         }
@@ -234,7 +237,6 @@ static void on_process(void *userdata) {
 
         int just_cleared = false;
 
-        std::cout << "TODO FIX: ABOUT TO CHECK FOR FREE" << std::endl;
 
         // Allocate latest_frame if needed
         if (data->latest_frame && (data->latest_frame->width != data->width || data->latest_frame->height != data->height)) {
@@ -287,10 +289,10 @@ static void on_process(void *userdata) {
         #if send_instantly
         send_latest_data(data);
         #endif
-        // printf("got a frame of size %d\n", spa_buffer->datas[0].chunk->size);
 
         pw_stream_queue_buffer(data->stream, b);
 }
+
 
 
 static const struct pw_stream_events stream_events = {
@@ -317,8 +319,6 @@ static void registry_event_global(void *data_raw,
                                   uint32_t version,
                                   const struct spa_dict *props)
 {
-    // return;
-
     stateData *data = (stateData *)data_raw;
 
     std::cout << "\t\tOffered: " << id << std::endl;
@@ -342,70 +342,7 @@ static void registry_event_global(void *data_raw,
         return;
     }
 
-    // Offered: 73
-    //                         object.serial = 132
-    //                         module.id = 2
-    //                         pipewire.protocol = protocol-native
-    //                         pipewire.sec.pid = 515053
-    //                         pipewire.sec.uid = 1000
-    //                         pipewire.sec.gid = 1000
-    //                         pipewire.sec.socket = pipewire-0
-    //                         pipewire.access = unrestricted
-    //                         application.name = gamescope
-    // Updated client target ID: 73
-    //                 Offered: 75
-    //                         object.serial = 133
-    //                         factory.id = 9
-    //                         client.id = 73
-    //                         node.name = gamescope
-    //                         media.class = Video/Source
-    // Updated target ID: 75
-    // Offered: 77
-    //                     object.serial = 134
-    //                     object.path = gamescope:capture_0
-    //                     node.id = 75
-    //                     port.id = 0
-    //                     port.name = capture_1
-    //                     port.direction = out
-    //                     port.alias = gamescope:capture_1
-    //                     port.group = stream.0
     return;
-
-
-
-    // print_spa_dict(props);
-
-
-    // const char *pid_strA = spa_dict_lookup(props, PW_KEY_APP_PROCESS_ID);
-    
-    // if (!pid_strA)
-    //     return;
-
-    // std::cout << "\t Has pid data A: " << pid_strA << std::endl;
-
-    // if (strcmp(type, PW_TYPE_INTERFACE_Node) != 0)
-    //     return;
-
-    // std::cout << "\t Is interface node!" << std::endl;
-    
-    // const char *pid_str = spa_dict_lookup(props, PW_KEY_CLIENT_ID);//"client.pid");
-    // // PW_KEY_CLIENT_PID
-    
-    // if (!pid_str)
-    //     return;
-
-    // std::cout << "\t Has pid data: " << pid_str << std::endl;
-
-
-    // pid_t pid = atoi(pid_str);
-
-    // stateData *data = (stateData *)data_raw;
-
-    // // if (is_child_of_target(pid)) {
-    // //     // store node.id
-    // //     // connect stream to THIS node
-    // // }
-    // std::cout << "Offered client pid: " << pid << std::endl;
 }
 
 static const struct pw_registry_events registry_events = {
@@ -418,16 +355,14 @@ static void core_done(void *data_raw, uint32_t id, int seq)
 {
     stateData *data = (stateData *)data_raw;
 
-
     std::cout << "Core sync done; using stream ID: " << data->pw_target_id << std::endl;
     if (data->pw_target_id > 0) {
         int re = pw_stream_connect(data->stream,
             PW_DIRECTION_INPUT,
             data->pw_target_id,
             (enum pw_stream_flags) (PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS),
-            data->pw_target_connect_helper_params, 1);
+            data->pw_connect_params.pw_target_connect_helper_params, 1);
     }
-    // PW_THROW_IF(data->pw_target_id == -1, "Unable to find running accessable instance of gamescope!"); // TODO - this can prob be removed
 }
 
 static const pw_core_events core_events = {
@@ -437,9 +372,6 @@ static const pw_core_events core_events = {
 
 
 void prepare_recording(stateData *data, int targetPid) {
-        // const struct spa_pod *params[1];
-        uint8_t buffer[1024];
-        struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
         struct pw_properties *props;
 
 
@@ -457,30 +389,38 @@ void prepare_recording(stateData *data, int targetPid) {
                         &stream_events,
                         data);
 
-        struct spa_rectangle min_size = SPA_RECTANGLE(1, 1);
-        struct spa_rectangle max_size = SPA_RECTANGLE(4096, 4096);
-        struct spa_rectangle default_size = SPA_RECTANGLE(1920, 1080);
 
-        struct spa_fraction min_framerate = SPA_FRACTION(0, 1);
-        struct spa_fraction max_framerate = SPA_FRACTION(1000, 1);
-        struct spa_fraction default_framerate = SPA_FRACTION(data->fps, 1);
 
-        *data->pw_target_connect_helper_params = (const struct spa_pod*) spa_pod_builder_add_object(&b,
+        data->pw_connect_params.b = SPA_POD_BUILDER_INIT(data->pw_connect_params.buffer, sizeof(data->pw_connect_params.buffer));
+
+        data->pw_connect_params.min_size = SPA_RECTANGLE(1, 1);
+        data->pw_connect_params.max_size = SPA_RECTANGLE(4096, 4096);
+        data->pw_connect_params.default_size = SPA_RECTANGLE(1920, 1080);
+
+        data->pw_connect_params.min_framerate = SPA_FRACTION(0, 1);
+        data->pw_connect_params.max_framerate = SPA_FRACTION(1000, 1);
+        data->pw_connect_params.default_framerate = SPA_FRACTION(data->fps, 1);
+
+        data->pw_connect_params.pw_target_connect_helper_params[0] =
+            (const struct spa_pod*) spa_pod_builder_add_object(
+                &data->pw_connect_params.b,
                 SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
                 SPA_FORMAT_mediaType,       SPA_POD_Id(SPA_MEDIA_TYPE_video),
                 SPA_FORMAT_mediaSubtype,    SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
-                SPA_FORMAT_VIDEO_format,    SPA_POD_CHOICE_ENUM_Id(2,
-                                                SPA_VIDEO_FORMAT_BGRx,
-                                                SPA_VIDEO_FORMAT_BGRx),
+                SPA_FORMAT_VIDEO_format,    SPA_POD_CHOICE_ENUM_Id(2, SPA_VIDEO_FORMAT_BGRx, SPA_VIDEO_FORMAT_BGRx),
                 SPA_FORMAT_VIDEO_size,      SPA_POD_CHOICE_RANGE_Rectangle(
-                                                &default_size,
-                                                &min_size,
-                                                &max_size),
+                    &data->pw_connect_params.default_size,
+                    &data->pw_connect_params.min_size,
+                    &data->pw_connect_params.max_size
+                ),
                 SPA_FORMAT_VIDEO_framerate, SPA_POD_CHOICE_RANGE_Fraction(
-                                                &default_framerate,
-                                                &min_framerate,
-                                                &max_framerate));
+                    &data->pw_connect_params.default_framerate,
+                    &data->pw_connect_params.min_framerate,
+                    &data->pw_connect_params.max_framerate
+                )
+            );
         
+
         if (targetPid > 0) {
             data->pw_target_search_pid = targetPid;
             data->pw_target_client_id = -1;
@@ -497,17 +437,10 @@ void prepare_recording(stateData *data, int targetPid) {
             pw_core *core = pw_context_connect(context, nullptr, 0);
             if (!core) {
                 std::cerr << "Failed to connect core\n";
-                return;// 1;
+                return;
             }
 
-            // 5. Get registry
             pw_registry *registry = pw_core_get_registry(core, PW_VERSION_REGISTRY, 0);
-
-            // 6. Add listener
-            // pw_registry_add_listener(registry,
-            //                         &registry_listener,
-            //                         &registry_events,
-            //                         nullptr);
 
 
             pw_core_add_listener(core,
@@ -525,7 +458,7 @@ void prepare_recording(stateData *data, int targetPid) {
                             PW_DIRECTION_INPUT,
                             PW_ID_ANY,
                             (enum pw_stream_flags) (PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS),
-                            data->pw_target_connect_helper_params, 1);
+                            data->pw_connect_params.pw_target_connect_helper_params, 1);
             printf("Hi me! GH, %d\n", re);
         }
 

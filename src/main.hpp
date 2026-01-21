@@ -43,6 +43,20 @@ const int RTP_MTU = 1200;
 
 
 
+typedef struct {
+    uint8_t buffer[1024];
+    struct spa_pod_builder b;
+
+    struct spa_rectangle min_size;
+    struct spa_rectangle max_size;
+    struct spa_rectangle default_size;
+
+    struct spa_fraction min_framerate;
+    struct spa_fraction max_framerate;
+    struct spa_fraction default_framerate;
+
+    const struct spa_pod *pw_target_connect_helper_params[1];
+} pw_connect_params_joined_obj;
 
 typedef struct {
         uint32_t fps = 60;
@@ -82,7 +96,8 @@ typedef struct {
         int pw_target_search_pid;
         int pw_target_client_id;
         int pw_target_id;
-        const struct spa_pod *pw_target_connect_helper_params[1];
+
+        pw_connect_params_joined_obj pw_connect_params;
 } stateData;
 
 
