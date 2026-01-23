@@ -50,6 +50,16 @@ static std::string find_event_node(const std::string& sysfs_input_path)
 }
 
 
+// Generated via JSON.stringify(Object.values(window.key_mapping)), will be the only usable keys. 
+auto static kb_buttons_bound = {
+    2,3,4,5,6,7,8,9,10,11,16,17,18,19,20,21,22,23,24,25,30,31,32,33,
+    34,35,36,37,38,44,45,46,47,48,49,50,103,105,106,108,1,12,13,14,
+    15,26,27,28,29,39,40,41,42,43,51,52,53,54,56,57,58,59,60,61,62,
+    63,64,65,66,67,68,87,88,69,70,55,71,72,73,74,75,76,77,78,79,80,
+    81,82,83,96,97,98,100,102,104,107,109,110,111,272,273,274
+};
+
+
 std::string setup_uinput_keyboard_mouse(stateData *data) {
     data->uinput_kbm_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
     if (data->uinput_kbm_fd < 0) {
@@ -69,15 +79,7 @@ std::string setup_uinput_keyboard_mouse(stateData *data) {
     IOCTL_WRAPPER(ioctl(data->uinput_kbm_fd, UI_SET_EVBIT, EV_KEY));
     
 
-    // Generated via JSON.stringify(Object.values(window.key_mapping)), will be the only usable keys. 
-    auto buttons_to_bind = {
-        2,3,4,5,6,7,8,9,10,11,16,17,18,19,20,21,22,23,24,25,30,31,32,33,
-        34,35,36,37,38,44,45,46,47,48,49,50,103,105,106,108,1,12,13,14,
-        15,26,27,28,29,39,40,41,42,43,51,52,53,54,56,57,58,59,60,61,62,
-        63,64,65,66,67,68,87,88,69,70,55,71,72,73,74,75,76,77,78,79,80,
-        81,82,83,96,97,98,100,102,104,107,109,110,111,272,273,274
-    };
-    for (uint16_t button: buttons_to_bind) {
+    for (uint16_t button: kb_buttons_bound) {
         IOCTL_WRAPPER(ioctl(data->uinput_kbm_fd, UI_SET_KEYBIT, button));
     }
 

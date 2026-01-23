@@ -20,7 +20,7 @@ int main(int argc, char *argv[]) {
         data.fps = 60;
 
 
-        setup_RTC(&data);
+        setup_RTC(&data, true, "wss://webrtc-streaming-pages.pages.dev/websocket");
         std::string fake_input_path = setup_uinput_keyboard_mouse(&data);
 
         // spawn_container_and_game(&data);

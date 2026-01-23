@@ -67,8 +67,11 @@ typedef struct {
         struct spa_video_info format;
 
 
+        std::shared_ptr<rtc::PeerConnection> pc_connection;
         std::shared_ptr<rtc::Track> track;
         std::shared_ptr<rtc::DataChannel> datatrack;
+
+        std::string ICE_offer_str;
 
 
         AVFrame *latest_frame = nullptr;
@@ -88,6 +91,7 @@ typedef struct {
         int uinput_crl_fd;
 
         std::shared_ptr<rtc::WebSocket> connection_open_socket;
+        std::string connection_code;
 
 
 
@@ -98,6 +102,7 @@ typedef struct {
         int pw_target_id;
 
         pw_connect_params_joined_obj pw_connect_params;
+
 } stateData;
 
 

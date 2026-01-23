@@ -4,25 +4,26 @@
 extern "C" {
 #endif
 
-// // Opaque handle pattern
-// typedef struct MyObject MyObject;
-
-// // Constructor / destructor
-// MyObject* myobject_new(int value);
-// void myobject_free(MyObject* obj);
-
-// // Methods
-// int myobject_get_value(const MyObject* obj);
-// void myobject_set_value(MyObject* obj, int value);
-
 typedef struct {
-    char* crl_path;
-    char* kbm_path;
+    const char* crl_path;
+    const char* kbm_path;
+
+    const char* ICE_offer;
+    const char* join_code;
+    bool WEBRTC_connection_failed;
+
+    int result_err; // If not 0, error
 
     void* opaque_internal_ctx;
 } gamescopeWebrtcCtx;
 
+
+
 gamescopeWebrtcCtx* gamescopeWebrtc_INIT(bool, bool);
+
+void gamescopeWebrtc_create_webrtc(gamescopeWebrtcCtx*, int, bool, char*);
+void gamescopeWebrtc_check_webrtc(gamescopeWebrtcCtx*);
+void gamescopeWebrtc_start_recording(gamescopeWebrtcCtx*, int);
 
 #ifdef __cplusplus
 }
