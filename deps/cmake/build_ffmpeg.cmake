@@ -86,6 +86,15 @@ ExternalProject_Add(ffmpeg_build
         # --disable-postproc
         # --disable-swresample
 
+        # --enable-pixfmt            # ensures avcodec_pix_fmt_to_codec_tag
+        # --enable-mem               # ensures ff_toupper4
+        # --enable-colorspace        # ensures av_csp_* functions
+        # --enable-dsp               # ensures ff_init_half2float_tables
+
+        --enable-parser=mpegvideo  # parser framework dependency
+        --enable-avutil            # ensure libavutil builds
+        --enable-small             # reduces size without breaking helpers
+
     BUILD_COMMAND make -j
     INSTALL_COMMAND make install
 

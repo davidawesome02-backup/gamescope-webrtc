@@ -43,6 +43,11 @@ target_link_libraries(gamescope-webrtc-lib PRIVATE
 target_link_libraries(gamescope-webrtc-lib PRIVATE
     "$<LINK_LIBRARY:WHOLE_ARCHIVE,datachannel>"
     "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg>"
+
+    "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg_avcodec>"
+    "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg_avformat>"
+    "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg_avutil>"
+    "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg_swscale>"
 )
 
 install(TARGETS gamescope-webrtc-lib)
