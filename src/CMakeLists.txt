@@ -1,4 +1,10 @@
 cmake_minimum_required(VERSION 3.13)
+project(gamescope-webrtc)
+
+set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} /home/david/local/libdatachannel-install)
+set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} /home/david/git/gamescope-webrtc/deps)
+set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} /home/david/git/gamescope-webrtc/deps/install)
+set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} /home/david/git/gamescope-webrtc/deps/libs)
 
 
 
@@ -14,12 +20,12 @@ include_directories(${PIPEWIRE_INCLUDE_DIRS})
 link_directories(${PIPEWIRE_LIBRARY_DIRS})
 
 
-add_executable(gamescope-webrtc main.cpp uinput_helper.cpp recording.cpp webrtc.cpp)
+# add_executable(gamescope-webrtc main.cpp uinput_helper.cpp recording.cpp webrtc.cpp)
 
 
-set_target_properties(gamescope-webrtc PROPERTIES
-    CXX_STANDARD 17
-    OUTPUT_NAME gamescope-webrtc)
+# set_target_properties(gamescope-webrtc PROPERTIES
+#     CXX_STANDARD 17
+#     OUTPUT_NAME gamescope-webrtc)
 
 
 #set_target_properties(gamescope-webrtc PROPERTIES
@@ -27,13 +33,13 @@ set_target_properties(gamescope-webrtc PROPERTIES
 
 find_package(Threads REQUIRED)
 find_package(LibDataChannel REQUIRED)
-target_link_libraries(gamescope-webrtc LibDataChannel::LibDataChannel Threads::Threads ${FFMPEG_LIBRARIES} ${PIPEWIRE_LIBRARIES})
+# target_link_libraries(gamescope-webrtc LibDataChannel::LibDataChannel Threads::Threads ${FFMPEG_LIBRARIES} ${PIPEWIRE_LIBRARIES})
 
-# Add include dirs for the project (if you keep a local include folder) 
-target_include_directories(gamescope-webrtc PRIVATE . ${FFMPEG_INCLUDE_DIRS} ${PIPEWIRE_INCLUDE_DIRS}) 
+# # Add include dirs for the project (if you keep a local include folder) 
+# target_include_directories(gamescope-webrtc PRIVATE . ${FFMPEG_INCLUDE_DIRS} ${PIPEWIRE_INCLUDE_DIRS}) 
 
-# Propagate pkg-config cflags to the target (safe) 
-target_compile_options(gamescope-webrtc PRIVATE ${FFMPEG_CFLAGS_OTHER} ${PIPEWIRE_CFLAGS_OTHER})
+# # Propagate pkg-config cflags to the target (safe) 
+# target_compile_options(gamescope-webrtc PRIVATE ${FFMPEG_CFLAGS_OTHER} ${PIPEWIRE_CFLAGS_OTHER})
 
 
 
@@ -56,3 +62,5 @@ target_include_directories(gamescope-webrtc-lib PRIVATE . ${FFMPEG_INCLUDE_DIRS}
 target_compile_options(gamescope-webrtc-lib PRIVATE ${FFMPEG_CFLAGS_OTHER} ${PIPEWIRE_CFLAGS_OTHER})
 
 target_include_directories(gamescope-webrtc-lib PUBLIC ./lib.h) # Define external libs.
+
+install(TARGETS gamescope-webrtc-lib)

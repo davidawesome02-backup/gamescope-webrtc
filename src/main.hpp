@@ -71,7 +71,6 @@ typedef struct {
         std::shared_ptr<rtc::Track> track;
         std::shared_ptr<rtc::DataChannel> datatrack;
 
-        std::string ICE_offer_str;
 
 
         AVFrame *latest_frame = nullptr;
@@ -88,10 +87,12 @@ typedef struct {
         AVCodecContext *encCtx;
 
         int uinput_kbm_fd;
+        std::string uinput_kbm_dev_path;
         int uinput_crl_fd;
 
         std::shared_ptr<rtc::WebSocket> connection_open_socket;
-        std::string connection_code;
+        std::shared_ptr<std::string> connection_code;
+        std::shared_ptr<std::string> ICE_offer_str;
 
 
 

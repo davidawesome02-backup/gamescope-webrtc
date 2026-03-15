@@ -10,7 +10,7 @@ typedef struct {
 
     const char* ICE_offer;
     const char* join_code;
-    bool WEBRTC_connection_failed;
+    bool webrtc_connection_failed;
 
     int result_err; // If not 0, error
 

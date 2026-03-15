@@ -8,7 +8,7 @@
 #include <atomic>
 #include <csignal>
 
-#include <uinput_helper.hpp>
+#include "uinput_helper.hpp"
 
 extern "C" {
     #include <linux/uinput.h>

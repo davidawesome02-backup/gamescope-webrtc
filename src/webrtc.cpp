@@ -1,4 +1,4 @@
-#include <webrtc.hpp>
+#include "webrtc.hpp"
 
 
 using nlohmann::json;
@@ -86,7 +86,7 @@ void setup_RTC(stateData *data, bool create_code, std::string url_base) {
             };
 
             std::string msg_as_str = msg.dump();
-            data->ICE_offer_str = msg_as_str;
+            data->ICE_offer_str = std::make_shared<std::string>(msg_as_str);
 
             std::string msg_as_b32 = b32enc(msg_as_str);
 
@@ -103,7 +103,10 @@ void setup_RTC(stateData *data, bool create_code, std::string url_base) {
                     std::cout << "REC msg from server: "+container_json["type"].get<std::string>() << std::endl;
                     if (container_json["type"].get<std::string>() == "code") {
                         std::cout << "Connection code: "+container_json["code"].get<std::string>() << std::endl;
-                        data->connection_code = container_json["code"].get<std::string>();
+                        // asm("int3");
+                        printf("asdasd %p\n", data);
+                        data->connection_code = std::make_shared<std::string>(container_json["code"].get<std::string>());
+                        printf("asdasd2 %p\n", data);
                     }
                     if (container_json["type"].get<std::string>() != "accept") return;
 
