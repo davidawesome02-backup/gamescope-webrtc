@@ -1,0 +1,12 @@
+#[submodule "deps/ffmpeg"]
+#path = deps/ffmpeg
+#url = https://github.com/ffmpeg/ffmpeg
+#shallow = true
+[submodule "deps/ffmpeg"]
+	path = deps/ffmpeg
+	url = https://github.com/ffmpeg/ffmpeg
+    shallow = true
+[submodule "deps/libdatachannel"]
+	path = deps/libdatachannel
+	url = https://github.com/paullouisageneau/libdatachannel
+    shallow = true
