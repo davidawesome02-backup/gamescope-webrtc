@@ -1,22 +1,6 @@
-// export const onRequest = async (context) => {
-//   const id = context.env.RTC_FW_DO_WORKER.idFromName("some-room");
-//   const stub = context.env.RTC_FW_DO_WORKER.get(id);
-
-//   // Forward request to the Durable Object
-//   return stub.fetch(context.request);
-// };
-
-
-// import { RtcForwardDO } from "./durable-object";
-
 interface Env {
   RTC_FW_DO_WORKER: DurableObjectNamespace;
-  // ...other bindings, if any
 }
-
-// import type { PagesFunction, PagesFunctionContext } from "@cloudflare/workers-types";
-
-import type { PagesFunction } from "@cloudflare/workers-types";
 
 const CODE_LENGTH = 6;
 
@@ -34,7 +18,6 @@ function normalize_b32(b32_raw: string): string {
 	b32_raw = b32_raw.toUpperCase()
 					 .replaceAll("0","O")
 					 .replaceAll("1","i")
-					//  .replaceAll("1","l")
 					 .replaceAll("s","5");
 	let alph = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 
@@ -46,8 +29,6 @@ function normalize_b32(b32_raw: string): string {
 
 
 // Worker
-// export async function onRequest(ctx: PagesFunction<Env>): Promise<Response> {
-// export const onRequest: PagesFunction<Env> = async (ctx) => {
 export async function onRequest(ctx: EventContext<Env, string, Record<string, unknown>>): Promise<Response> {
 	const request = ctx.request;
 	const env = ctx.env;
