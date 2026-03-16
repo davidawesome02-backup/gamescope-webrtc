@@ -8,3 +8,8 @@
 NEW! 
 
 just run `git submodule update --init --recursive --depth 1;mkdir build; cd build; cmake ..; cmake --build . -j`
+
+
+Some of this code is AI generated beacuse I was just trying to make it work. I will update to make it properly work better later, this was just being done to have it work as a POC first.
+
+If you want to use it other than for testing or adding a feature here, message me and I will license it to you temporarly while I find what I want to have this licensed under, this is just a quick notice so I dont have legal issues, will update in a bit.
