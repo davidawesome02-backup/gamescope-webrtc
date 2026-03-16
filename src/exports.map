@@ -1,0 +1,10 @@
+{
+    global:
+        gamescopeWebrtc_INIT;
+        gamescopeWebrtc_create_webrtc;
+        gamescopeWebrtc_check_webrtc;
+        gamescopeWebrtc_start_recording;
+
+    local:
+        *;
+};

@@ -1,5 +1,7 @@
 #pragma once
 
+#define GS_EXPORT __attribute__((visibility("default")))
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -19,11 +21,11 @@ typedef struct {
 
 
 
-gamescopeWebrtcCtx* gamescopeWebrtc_INIT(bool, bool);
+GS_EXPORT gamescopeWebrtcCtx* gamescopeWebrtc_INIT(bool, bool);
 
-void gamescopeWebrtc_create_webrtc(gamescopeWebrtcCtx*, int, bool, char*);
-void gamescopeWebrtc_check_webrtc(gamescopeWebrtcCtx*);
-void gamescopeWebrtc_start_recording(gamescopeWebrtcCtx*, int);
+GS_EXPORT void gamescopeWebrtc_create_webrtc(gamescopeWebrtcCtx*, int, bool, char*);
+GS_EXPORT void gamescopeWebrtc_check_webrtc(gamescopeWebrtcCtx*);
+GS_EXPORT void gamescopeWebrtc_start_recording(gamescopeWebrtcCtx*, int);
 
 #ifdef __cplusplus
 }

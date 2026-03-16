@@ -23,6 +23,7 @@ set_target_properties(gamescope-webrtc-lib PROPERTIES
     VISIBILITY_INLINES_HIDDEN YES
 )
 
+
 # includes
 target_include_directories(gamescope-webrtc-lib PRIVATE
     .
@@ -48,6 +49,10 @@ target_link_libraries(gamescope-webrtc-lib PRIVATE
     "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg_avformat>"
     "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg_avutil>"
     "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg_swscale>"
+)
+
+target_link_options(gamescope-webrtc-lib PRIVATE
+    "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports.map"
 )
 
 install(TARGETS gamescope-webrtc-lib)
