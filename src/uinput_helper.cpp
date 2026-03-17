@@ -16,6 +16,7 @@ extern "C" {
     #include <fcntl.h>
 }
 
+// I may replace exit here later, but as of now, if you dont support virtual input creation, what in the world is your system?
 #define IOCTL_WRAPPER(call) \
     ({ \
         typeof(call) ret = (call); \
@@ -60,6 +61,20 @@ auto static kb_buttons_bound = {
 };
 
 
+static void setup_ctrl_axis(int fd, int axis, int min, int max)
+{
+    struct uinput_abs_setup abs;
+
+    memset(&abs, 0, sizeof(abs));
+    abs.code = axis;
+    abs.absinfo.minimum = min;
+    abs.absinfo.maximum = max;
+    abs.absinfo.flat = 128;
+    abs.absinfo.fuzz = 16;
+
+    IOCTL_WRAPPER(ioctl(fd, UI_ABS_SETUP, &abs));
+}
+
 std::string setup_uinput_keyboard_mouse(stateData *data) {
     data->uinput_kbm_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
     if (data->uinput_kbm_fd < 0) {
@@ -89,13 +104,93 @@ std::string setup_uinput_keyboard_mouse(stateData *data) {
     usetup.id.bustype = BUS_USB;
     usetup.id.vendor = 0x1234;
     usetup.id.product = 0x5678;
-    strcpy(usetup.name, "Example dev!");
+    strcpy(usetup.name, "Virtual GamescopeWebrtc KBM");
 
     IOCTL_WRAPPER(ioctl(data->uinput_kbm_fd, UI_DEV_SETUP, &usetup));
     IOCTL_WRAPPER(ioctl(data->uinput_kbm_fd, UI_DEV_CREATE));
 
     char sysfs_device_name[16];
     IOCTL_WRAPPER(ioctl(data->uinput_kbm_fd, UI_GET_SYSNAME(sizeof(sysfs_device_name)), sysfs_device_name));
+    std::string device_name = std::string(sysfs_device_name);
+    std::string dev_event_id = find_event_node("/sys/devices/virtual/input/"+device_name);
+    std::cout << "Created device: "+dev_event_id << std::endl;
+
+    return dev_event_id;
+}
+
+std::string setup_uinput_controller(stateData *data) {
+    data->uinput_ctrl_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
+    if (data->uinput_kbm_fd < 0) {
+        perror("Damn no uinput");
+        throw std::runtime_error("No uinput ability");
+    }
+
+    /* Enable event types */
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_EVBIT, EV_KEY));
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_EVBIT, EV_ABS));
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_EVBIT, EV_SYN));
+
+    /* Face buttons */
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_KEYBIT, BTN_SOUTH));
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_KEYBIT, BTN_EAST));
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_KEYBIT, BTN_NORTH));
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_KEYBIT, BTN_WEST));
+
+    /* Shoulder buttons */
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_KEYBIT, BTN_TL));
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_KEYBIT, BTN_TR));
+
+    /* Stick buttons */
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_KEYBIT, BTN_THUMBL));
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_KEYBIT, BTN_THUMBR));
+
+    /* Menu buttons */
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_KEYBIT, BTN_START));
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_KEYBIT, BTN_SELECT));
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_KEYBIT, BTN_MODE));
+
+    /* Axes */
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_ABSBIT, ABS_X));
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_ABSBIT, ABS_Y));
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_ABSBIT, ABS_RX));
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_ABSBIT, ABS_RY));
+
+    /* Triggers */
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_ABSBIT, ABS_Z));
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_ABSBIT, ABS_RZ));
+
+    /* D-pad */
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_ABSBIT, ABS_HAT0X));
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_SET_ABSBIT, ABS_HAT0Y));
+
+    /* Axis configuration */
+
+    setup_ctrl_axis(data->uinput_ctrl_fd, ABS_X, -32768, 32767);
+    setup_ctrl_axis(data->uinput_ctrl_fd, ABS_Y, -32768, 32767);
+
+    setup_ctrl_axis(data->uinput_ctrl_fd, ABS_RX, -32768, 32767);
+    setup_ctrl_axis(data->uinput_ctrl_fd, ABS_RY, -32768, 32767);
+
+    setup_ctrl_axis(data->uinput_ctrl_fd, ABS_Z, 0, 255);
+    setup_ctrl_axis(data->uinput_ctrl_fd, ABS_RZ, 0, 255);
+
+    setup_ctrl_axis(data->uinput_ctrl_fd, ABS_HAT0X, -1, 1);
+    setup_ctrl_axis(data->uinput_ctrl_fd, ABS_HAT0Y, -1, 1);
+
+
+
+    struct uinput_setup usetup = {0};
+    
+    usetup.id.bustype = BUS_USB;
+    usetup.id.vendor = 0x1234;
+    usetup.id.product = 0x5678;
+    strcpy(usetup.name, "Virtual GamescopeWebrtc CTRL");
+
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_DEV_SETUP, &usetup));
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_DEV_CREATE));
+
+    char sysfs_device_name[16];
+    IOCTL_WRAPPER(ioctl(data->uinput_ctrl_fd, UI_GET_SYSNAME(sizeof(sysfs_device_name)), sysfs_device_name));
     std::string device_name = std::string(sysfs_device_name);
     std::string dev_event_id = find_event_node("/sys/devices/virtual/input/"+device_name);
     std::cout << "Created device: "+dev_event_id << std::endl;
@@ -130,12 +225,17 @@ void process_remote_message(stateData *data, std::vector<std::byte> bin_data) {
         emit_uinput(data->uinput_kbm_fd, EV_REL, REL_X, x_movement);
         emit_uinput(data->uinput_kbm_fd, EV_REL, REL_Y, y_movement);
         emit_uinput(data->uinput_kbm_fd, EV_REL, REL_WHEEL_HI_RES, scroll_movement);
+
         for (int i=7; i<bin_data.size(); i+=2) {
             // EV_KEY
-            auto data_byte = read_le_from_vec<uint16_t>(bin_data,i);
-            bool pressed = ((data_byte&0x1000)>0);
+            auto data_bytes = read_le_from_vec<uint16_t>(bin_data,i);
 
-            emit_uinput(data->uinput_kbm_fd, EV_KEY, data_byte&0xFFF, pressed);
+            auto button_byte = data_bytes&0xFFF;
+            auto info_byte = (data_bytes&0xF000)>>12;
+
+            bool pressed = info_byte&1 == 1;
+
+            emit_uinput(data->uinput_kbm_fd, EV_KEY, button_byte, pressed);
         }
 
         emit_uinput(data->uinput_kbm_fd, EV_SYN, SYN_REPORT, 0);

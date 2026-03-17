@@ -7,7 +7,7 @@ extern "C" {
 #endif
 
 typedef struct {
-    const char* crl_path;
+    const char* ctrl_path;
     const char* kbm_path;
 
     const char* ICE_offer;
@@ -17,15 +17,15 @@ typedef struct {
     int result_err; // If not 0, error
 
     void* opaque_internal_ctx;
-} gamescopeWebrtcCtx;
+} gamescope_webrtc_ctx;
 
 
 
-GS_EXPORT gamescopeWebrtcCtx* gamescopeWebrtc_INIT(bool, bool);
+GS_EXPORT gamescope_webrtc_ctx* gamescope_webrtc_init(bool, bool);
 
-GS_EXPORT void gamescopeWebrtc_create_webrtc(gamescopeWebrtcCtx*, int, bool, char*);
-GS_EXPORT void gamescopeWebrtc_check_webrtc(gamescopeWebrtcCtx*);
-GS_EXPORT void gamescopeWebrtc_start_recording(gamescopeWebrtcCtx*, int);
+GS_EXPORT void gamescope_webrtc_create_webrtc(gamescope_webrtc_ctx*, int, bool, char*);
+GS_EXPORT void gamescope_webrtc_check_webrtc(gamescope_webrtc_ctx*);
+GS_EXPORT void gamescope_webrtc_start_recording(gamescope_webrtc_ctx*, int);
 
 #ifdef __cplusplus
 }

@@ -25,6 +25,7 @@ static void recive_data_message(stateData *data, rtc::message_variant recived) {
     auto bin_data = std::get<rtc::binary>(recived);
     
     if (!(data->uinput_kbm_fd >= 0)) return;
+    if (!(data->uinput_ctrl_fd >= 0)) return;
 
     if (bin_data.size() < 1) return;
     auto type_selected = read_le_from_vec<int8_t>(bin_data, 0);
@@ -49,7 +50,7 @@ std::string b32enc(const std::string& in) {
         while (bits >= 5) {
             out.push_back(A[(buf >> (bits - 5)) & 31]);
             bits -= 5;
-            buf &= (1u << bits) - 1;  // 🔑 discard consumed bits
+            buf &= (1u << bits) - 1;
         }
     }
 
@@ -137,7 +138,7 @@ void setup_RTC(stateData *data, bool create_code, std::string url_base) {
     data->track = pc->addTrack(media);
 
     data->datatrack = pc->createDataChannel("video-data", {
-        protocol: "hi",
+        protocol: "Remote input v0",
     });
 
     data->datatrack.get()->onMessage([data](rtc::message_variant a){

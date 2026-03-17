@@ -8,7 +8,7 @@
 
 
 static bool setup_libav_buffers(stateData *data) {
-    printf("REALLOCING BUFFERS\n");
+    std::cout << "REALLOCING BUFFERS" << std::endl;
     int width = data->width;
     int height = data->height;
     int streamWidth = data->streamWidth;
@@ -98,7 +98,7 @@ static bool setup_libav_buffers(stateData *data) {
     av_dict_free(&opts);
     PW_THROW_IF(ret < 0, "avformat_write_header failed");
 
-    printf("ALL BUFFERS ALLOCATED\n");
+    std::cout << "ALL BUFFERS ALLOCATED" << std::endl;
 
 
     return true;
@@ -159,25 +159,25 @@ static void on_param_changed(void *userdata, uint32_t id, const struct spa_pod *
 
         printf("Format requested!\n");
         if (param == NULL || id != SPA_PARAM_Format) {
-                printf("\tRETURNA, %d  %p\n", id, param);
+                printf("\tFormat parameter not specifed, %d  %p\n", id, param);
                 return;
         }
 
         if (spa_format_parse(param,
                         &data->format.media_type,
                         &data->format.media_subtype) < 0) {
-                printf("\tRETURNB\n");
+                printf("\tUnable to parse format for media type\n");
                 return;
         }
 
         if (data->format.media_type != SPA_MEDIA_TYPE_video ||
             data->format.media_subtype != SPA_MEDIA_SUBTYPE_raw) {
-                printf("\tRETURNC\n");
+                printf("\tFormat media is not correct\n");
                 return;
         }
 
         if (spa_format_video_raw_parse(param, &data->format.info.raw) < 0) {
-                printf("\tRETURND\n");
+                printf("\tUnable to locate raw video stream\n");
                 return;
         }
 
@@ -240,7 +240,7 @@ static void on_process(void *userdata) {
 
         // Allocate latest_frame if needed
         if (data->latest_frame && (data->latest_frame->width != data->width || data->latest_frame->height != data->height)) {
-            printf("FREEING BUFFERS\n");
+            std::cout << "FREEING BUFFERS" << std::endl;;
 
             if (data->encCtx) {
                 avcodec_send_frame(data->encCtx, nullptr); // flush
@@ -270,7 +270,7 @@ static void on_process(void *userdata) {
                 data->sws = nullptr;
             }
 
-            printf("BUFFERS FREED\n");
+            std::cout << "BUFFERS FREED" << std::endl;;
 
         }
         if (!data->latest_frame) { // Lifetime of enc_frame, latest_frame, and encPkt are synced.
@@ -459,7 +459,7 @@ void prepare_recording(stateData *data, int targetPid) {
                             PW_ID_ANY,
                             (enum pw_stream_flags) (PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS),
                             data->pw_connect_params.pw_target_connect_helper_params, 1);
-            printf("Hi me! GH, %d\n", re);
+            std::cout << "Connecting to any stream - stream id: " << re << std::endl;
         }
 
         #if send_instantly
@@ -474,7 +474,6 @@ void prepare_recording(stateData *data, int targetPid) {
         // Set the initial value and interval for the timer
         pw_loop_update_timer(pw_main_loop_get_loop(data->loop), frame_timer, &value, &interval, true);
 
-        // pw_timer_set(frame_timer, interval_ms, interval_ms);  // The same interval for both initial delay and periodicity
         #endif
 }
 void start_recording(stateData *data) {

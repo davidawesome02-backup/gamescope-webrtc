@@ -1,7 +1,6 @@
 /** @type {RTCDataChannel} */
 let data_channel;
 
-// document.querySelector('textarea').value = String.raw`PASTE HERE`;
 const videoElement = document.getElementById('video-element');
 videoElement.onload = () => {
     console.log("Video loaded!")
@@ -31,7 +30,6 @@ function getVideoCoords(video, event) {
 }
 
 videoElement.onclick = (evt) => {
-    // console.log(getVideoCoords(videoElement, evt))
     if (!document.pointerLockElement) {
         videoElement.requestPointerLock();
     }
@@ -85,8 +83,7 @@ function updateMousePosition(e) {
     // Mouse movement and held buttons
     device_change_info["delta_devices"][0] += e.movementX;
     device_change_info["delta_devices"][1] += e.movementY;
-    // send_data = new Int8Array([0, e.movementX, e.movementY, 0, e.buttons]);
-    // data_channel.send(send_data)
+
     updateKeyPresses("MOUSE_LEFT",   (e.buttons>>0) & 1 >0)
     updateKeyPresses("MOUSE_RIGHT",  (e.buttons>>1) & 1 >0)
     updateKeyPresses("MOUSE_MIDDLE", (e.buttons>>2) & 1 >0)
@@ -96,17 +93,14 @@ function updateMousePosition(e) {
 }
 function updateMouseWheel(e) {
     // Mouse movement and held buttons
-    // send_data = new Int8Array([0, 0, 0, -e.deltaY/120, 0]);
     device_change_info["delta_devices"][2] += -e.deltaY;
-    
-    // data_channel.send(send_data)
 }
+
 function updateKeyPresses_U(e) {updateKeyPresses(e.code, false); e?.preventDefault?.(); return false;}
 function updateKeyPresses_D(e) {updateKeyPresses(e.code, true); e?.preventDefault?.(); return false;}
 function updateKeyPresses(c, pressed) {
     if (!window?.key_mapping?.[c]) return;
     if (device_change_info.current_buttons_status[c] == pressed) return;
-    // console.log(c, pressed)
 
     device_change_info.current_buttons_status[c] = pressed;
     device_change_info.change_buttons_status[c]  = true;
@@ -121,21 +115,10 @@ function publishRemoteDeviceUpdates() {
         Object.keys(device_change_info.change_buttons_status).length == 0
     ) return;
 
-    // int16_to_int8 = (i) => {
-    //     return [i&0xff, (i>>8)&0xff]
-    // }
-
-    // send_data = new Uint8Array([
-    //     0, // Type of message (0 is only supported currently)
-    //     int16_to_int8(device_change_info["delta_devices"][0]), // X Change
-    //     int16_to_int8(device_change_info["delta_devices"][1]), // Y Change
-    //     int16_to_int8(device_change_info["delta_devices"][2]), // Scroll change
-    //     0
-    // ].flat());
-
     let data_buffer = new ArrayBuffer(1024);
     let data = new DataView(data_buffer);
     let current_len = 0;
+
     let add_uint8_t = (value) => {data.setUint8(current_len, value); current_len+=1}
     let add_int16_t = (value) => {data.setInt16(current_len, value, true); current_len+=2}
     let add_uint16_t = (value) => {data.setUint16(current_len, value, true); current_len+=2}
@@ -151,21 +134,21 @@ function publishRemoteDeviceUpdates() {
         let current_status = device_change_info?.current_buttons_status?.[changed_button];
         let previous_status = device_change_info?.previous_buttons_status?.[changed_button]
 
-        let temp_new_status = 
+        let new_held_status = 
             !(
                 previous_status ?? // Use current status to toggle if it exists
                 !current_status // Or fall back to current one (using ! so it toggles twice)
             );
 
-        device_change_info.previous_buttons_status[changed_button] = temp_new_status;
+        device_change_info.previous_buttons_status[changed_button] = new_held_status;
 
-        if (temp_new_status == !!current_status) delete device_change_info.change_buttons_status[changed_button];
+        if (new_held_status == !!current_status) delete device_change_info.change_buttons_status[changed_button];
 
-        add_uint16_t((window?.key_mapping?.[changed_button] & 0x0fff) | (temp_new_status?0x1000:0))
-        // console.log(temp_new_status, changed_button)
+        let button_byte = (window?.key_mapping?.[changed_button] & 0x0fff);
+        let options_byte = ((new_held_status?1:0)<<12) & 0xf000;
+
+        add_uint16_t(button_byte | options_byte)
     }
-
-    // console.log(new Uint8Array(data_buffer,0,current_len))
 
     data_channel.send(new Uint8Array(data_buffer,0,current_len))
 
@@ -180,34 +163,34 @@ document.addEventListener("pointerlockchange", lockChangeAlert);
 
 
 function b32dec(input) {
-  // RFC 4648 Base32 character set
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  // Map characters to values
-  const map = Object.create(null);
-  for (let i = 0; i < alphabet.length; ++i)
-    map[alphabet[i]] = i;
-  // Also support lowercase
-  for (let i = 0; i < alphabet.length; ++i)
-    map[alphabet[i].toLowerCase()] = i;
+    // RFC 4648 Base32 character set
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    // Map characters to values
+    const map = Object.create(null);
+    for (let i = 0; i < alphabet.length; ++i)
+        map[alphabet[i]] = i;
+    // Also support lowercase
+    for (let i = 0; i < alphabet.length; ++i)
+        map[alphabet[i].toLowerCase()] = i;
 
-  // Remove any chars not in alphabet (not strictly necessary)
-  input = input.replace(/[^A-Za-z2-7]/g, '');
+    // Remove any chars not in alphabet (not strictly necessary)
+    input = input.replace(/[^A-Za-z2-7]/g, '');
 
-  let bits = 0;
-  let value = 0;
-  let output = '';
+    let bits = 0;
+    let value = 0;
+    let output = '';
 
-  for (let i = 0; i < input.length; ++i) {
-    value = (value << 5) | map[input[i]];
-    bits += 5;
-    if (bits >= 8) {
-      bits -= 8;
-      output += String.fromCharCode((value >> bits) & 0xFF);
-      value = value & ((1 << bits) - 1);
+    for (let i = 0; i < input.length; ++i) {
+        value = (value << 5) | map[input[i]];
+        bits += 5;
+        if (bits >= 8) {
+        bits -= 8;
+        output += String.fromCharCode((value >> bits) & 0xFF);
+        value = value & ((1 << bits) - 1);
+        }
     }
-  }
 
-  return output;
+    return output;
 }
 
 
@@ -220,7 +203,7 @@ document.querySelector('button').addEventListener('click',  async () => {
 
     const websock = new WebSocket(ws_url);
     websock.onclose = (e) => {
-        console.log(e);
+        console.log("Disconnected from webscoket: ", e);
         document.getElementById('input_code').value = "";
     }
     websock.onmessage = async (e) => {
@@ -238,52 +221,57 @@ document.querySelector('button').addEventListener('click',  async () => {
             if (pc.iceGatheringState === 'complete') {
                 // We only want to provide an answer once all of our candidates have been added to the SDP.
                 const answer = pc.localDescription;
-                let asd = JSON.stringify({"type": answer.type, sdp: answer.sdp});
+                let webrtc_encoded_answer = JSON.stringify({"type": answer.type, sdp: answer.sdp});
                 
-                websock.send(asd);
-                console.log(asd);
+                websock.send(webrtc_encoded_answer);
+                console.log("Sending encoded answer:", webrtc_encoded_answer);
             }
         }
 
         pc.ontrack = (evt) => {
-            console.log(evt)
-            console.log("Got track!", evt);
+            console.log("Got webrtc track: ", evt);
+
             evt.streams[0].onactive = () => {
-                console.log("Playback!")
+                console.log("Webrtc track active!")
             }
             evt.streams[0].onaddtrack = () => {
-                console.log("Playback 3!")
+                console.log("Webrtc new track added.")
             }
-            console.log("asdas: ", evt.streams[0].active)
+
             videoElement.srcObject = evt.streams[0];
             try {
-            videoElement.play();
-            } catch {console.log("Cant autoplay!")}
-            // Try setting jitter buffer parameters, none of this work :P
+                videoElement.play();
+            } catch {console.log("Cant autoplay new track!")}
+
+            // Try setting jitter buffer parameters, none of this work :P so I have to just send at 60hz on server.
             const receiver = evt.transceiver.receiver;
             receiver.jitterBufferTarget = 0; // Lowering jitter buffer target
             receiver.jitterBufferDelayHint = 0; // Lowering jitter buffer delay hint
             receiver.playoutDelayHint = 0; // Minimizing playout delay
         };
         pc.ondatachannel = (evt) => {
-            console.log(evt);
+            console.log("Data channel starting!");
             data_channel = evt.channel;
             evt.channel.addEventListener("open", ()=>{
-                console.log("datach open");
+                console.log("Datachannel open, enabling input and playback!");
                 
                 document.getElementById("connect_popup").classList.toggle("hidden");
                 document.getElementById("video-element").classList.toggle("hidden");
-                
-
             })
         }
 
-        console.log(websock_msg);
-        console.log(b32dec(websock_msg.offer))
-        await pc.setRemoteDescription(JSON.parse(b32dec(websock_msg.offer)));
+        let decoded_b64_offer = JSON.parse(b32dec(websock_msg.offer));
+        console.log("Websocket offered: ",decoded_b64_offer);
+
+        await pc.setRemoteDescription(decoded_b64_offer);
+
 
         const answer = await pc.createAnswer();
+
+        console.log("Setting local webrtc answer: ", answer);
         await pc.setLocalDescription(answer);
+
+        // For debugging purposes
         window.pc_ = pc
     }
 

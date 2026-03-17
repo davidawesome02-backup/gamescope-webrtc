@@ -88,7 +88,8 @@ typedef struct {
 
         int uinput_kbm_fd;
         std::string uinput_kbm_dev_path;
-        int uinput_crl_fd;
+        int uinput_ctrl_fd;
+        std::string uinput_ctrl_dev_path;
 
         std::shared_ptr<rtc::WebSocket> connection_open_socket;
         std::shared_ptr<std::string> connection_code;
