@@ -45,22 +45,30 @@ ExternalProject_Add(ffmpeg_build
         # threading
         --enable-pthreads
 
-        # fast CPU optimizations
+        # fast CPU optimizations (cant use asm because of PIC)
         --enable-runtime-cpudetect
-        # --enable-asm
-        # --enable-x86asm
 
         # unfortunately required to make ffmpeg compile into a single .a file :(
         --disable-asm
 
         # H264 support
-        --enable-decoder=h264
-        --enable-parser=h264
-        --enable-encoder=libx264
+        # --enable-decoder=h264
+        # --enable-parser=h264
+        # --enable-encoder=libx264
+        # --enable-encoder=libx264rgb
+        --enable-encoder=h264
+
+        --enable-hwaccel=h264_vulkan
+        --enable-encoder=h264_vulkan
+
+        # --enable-libx264
+        --enable-vulkan
+        --enable-gpl
+
 
         # containers
         --enable-muxer=flv
-        --enable-demuxer=flv
+        # --enable-demuxer=flv
 
         # streaming
         --enable-network
@@ -68,28 +76,6 @@ ExternalProject_Add(ffmpeg_build
 
         # scaling
         --enable-swscale
-
-        # hardware acceleration frameworks
-        --enable-hwaccel=h264_vaapi
-        --enable-hwaccel=h264_nvdec
-        --enable-hwaccel=h264_qsv
-
-        # hardware encoders
-        --enable-encoder=h264_nvenc
-        --enable-encoder=h264_vaapi
-        --enable-encoder=h264_qsv
-
-        # remove unused subsystems (NOT WORKING)
-        # --disable-filters
-        # --disable-devices
-        # --disable-avdevice
-        # --disable-postproc
-        # --disable-swresample
-
-        # --enable-pixfmt            # ensures avcodec_pix_fmt_to_codec_tag
-        # --enable-mem               # ensures ff_toupper4
-        # --enable-colorspace        # ensures av_csp_* functions
-        # --enable-dsp               # ensures ff_init_half2float_tables
 
         --enable-parser=mpegvideo  # parser framework dependency
         --enable-avutil            # ensure libavutil builds

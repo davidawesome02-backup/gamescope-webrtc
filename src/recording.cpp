@@ -55,7 +55,7 @@ static bool setup_libav_buffers(stateData *data) {
 
     AVDictionary *codec_opts = NULL;
     av_dict_set(&codec_opts, "preset", "ultrafast", 0);
-    av_dict_set(&codec_opts, "tune", "zerolatency", 0);
+    // av_dict_set(&codec_opts, "tune", "zerolatency", 0); // TODO reenable!!!
 
 
     ret = avcodec_open2(data->encCtx, encoder, &codec_opts);

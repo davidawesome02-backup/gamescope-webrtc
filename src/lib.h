@@ -21,11 +21,11 @@ typedef struct {
 
 
 
-GS_EXPORT gamescope_webrtc_ctx* gamescope_webrtc_init(bool, bool);
+GS_EXPORT gamescope_webrtc_ctx* gamescope_webrtc_init(bool kbm, bool ctrl);
 
-GS_EXPORT void gamescope_webrtc_create_webrtc(gamescope_webrtc_ctx*, int, bool, char*);
-GS_EXPORT void gamescope_webrtc_check_webrtc(gamescope_webrtc_ctx*);
-GS_EXPORT void gamescope_webrtc_start_recording(gamescope_webrtc_ctx*, int);
+GS_EXPORT void gamescope_webrtc_create_webrtc(gamescope_webrtc_ctx* allocated_ctx, int fps, bool request_code, char* URL);
+GS_EXPORT void gamescope_webrtc_check_webrtc(gamescope_webrtc_ctx* allocated_ctx);
+GS_EXPORT void gamescope_webrtc_start_recording(gamescope_webrtc_ctx* allocated_ctx, int gamescope_pid);
 
 #ifdef __cplusplus
 }

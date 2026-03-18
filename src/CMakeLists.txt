@@ -40,19 +40,55 @@ target_link_libraries(gamescope-webrtc-lib PRIVATE
     Threads::Threads
 )
 
-# force static libraries to be fully merged into the .so
+
+target_link_libraries(gamescope-webrtc-lib PRIVATE
+    "datachannel"
+
+    "ffmpeg_avcodec"
+    "ffmpeg_avformat"
+    "ffmpeg_avutil"
+    "ffmpeg_swscale"
+)
+
 target_link_libraries(gamescope-webrtc-lib PRIVATE
     "$<LINK_LIBRARY:WHOLE_ARCHIVE,datachannel>"
     "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg>"
-
-    "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg_avcodec>"
-    "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg_avformat>"
-    "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg_avutil>"
-    "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg_swscale>"
 )
+
+# target_link_libraries(gamescope-webrtc-lib PRIVATE
+#     "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg_avcodec>"
+#     "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg_avformat>"
+#     "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg_avutil>"
+#     "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg_swscale>"
+# )
+
 
 target_link_options(gamescope-webrtc-lib PRIVATE
     "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports.map"
 )
+
+target_compile_options(gamescope-webrtc-lib PRIVATE -fvisibility=hidden)
+
+
+
+
+
+add_executable(gamescope-webrtc example.cpp)
+
+set_target_properties(gamescope-webrtc PROPERTIES
+    CXX_STANDARD 17
+    OUTPUT_NAME gamescope-webrtc
+)
+
+target_include_directories(gamescope-webrtc PRIVATE
+    .
+)
+
+# normal runtime dependencies
+target_link_libraries(gamescope-webrtc PRIVATE
+    gamescope-webrtc-lib
+)
+
+
 
 install(TARGETS gamescope-webrtc-lib)

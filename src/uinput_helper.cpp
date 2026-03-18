@@ -165,17 +165,17 @@ std::string setup_uinput_controller(stateData *data) {
 
     /* Axis configuration */
 
-    setup_ctrl_axis(data->uinput_ctrl_fd, ABS_X, -32768, 32767);
-    setup_ctrl_axis(data->uinput_ctrl_fd, ABS_Y, -32768, 32767);
+    // setup_ctrl_axis(data->uinput_ctrl_fd, ABS_X, -32768, 32767);
+    // setup_ctrl_axis(data->uinput_ctrl_fd, ABS_Y, -32768, 32767);
 
-    setup_ctrl_axis(data->uinput_ctrl_fd, ABS_RX, -32768, 32767);
-    setup_ctrl_axis(data->uinput_ctrl_fd, ABS_RY, -32768, 32767);
+    // setup_ctrl_axis(data->uinput_ctrl_fd, ABS_RX, -32768, 32767);
+    // setup_ctrl_axis(data->uinput_ctrl_fd, ABS_RY, -32768, 32767);
 
-    setup_ctrl_axis(data->uinput_ctrl_fd, ABS_Z, 0, 255);
-    setup_ctrl_axis(data->uinput_ctrl_fd, ABS_RZ, 0, 255);
+    // setup_ctrl_axis(data->uinput_ctrl_fd, ABS_Z, 0, 255);
+    // setup_ctrl_axis(data->uinput_ctrl_fd, ABS_RZ, 0, 255);
 
-    setup_ctrl_axis(data->uinput_ctrl_fd, ABS_HAT0X, -1, 1);
-    setup_ctrl_axis(data->uinput_ctrl_fd, ABS_HAT0Y, -1, 1);
+    // setup_ctrl_axis(data->uinput_ctrl_fd, ABS_HAT0X, -1, 1);
+    // setup_ctrl_axis(data->uinput_ctrl_fd, ABS_HAT0Y, -1, 1);
 
 
 
