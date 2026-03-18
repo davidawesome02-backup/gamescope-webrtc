@@ -7,75 +7,71 @@
 #define PW_THROW_IF(cond, msg) if (cond) throw std::runtime_error(msg);
 
 
+static enum AVPixelFormat get_hw_format(AVCodecContext *ctx, const enum AVPixelFormat *pix_fmts) {
+    while (*pix_fmts != AV_PIX_FMT_NONE) {
+        if (*pix_fmts == AV_PIX_FMT_VULKAN)
+            return *pix_fmts;
+        pix_fmts++;
+    }
+    fprintf(stderr, "Vulkan pixel format not offered by encoder.\n");
+    return AV_PIX_FMT_NONE;
+}
+
+
 static bool setup_libav_buffers(stateData *data) {
-    std::cout << "REALLOCING BUFFERS" << std::endl;
     int width = data->width;
     int height = data->height;
     int streamWidth = data->streamWidth;
     int streamHeight = data->streamHeight;
-
     int ret = 0;
 
-    data->latest_frame = av_frame_alloc();
-    data->latest_frame->format = AV_PIX_FMT_BGR0;
-    data->latest_frame->width  = width;
-    data->latest_frame->height = height;
-    ret = av_frame_get_buffer(data->latest_frame, 32);
-    PW_THROW_IF(ret < 0, "Failed to get latest_frame frame buffer");
+    // 1. Vulkan HW device
+    ret = av_hwdevice_ctx_create(&data->hw_device_ctx, AV_HWDEVICE_TYPE_VULKAN, NULL, NULL, 0);
+    PW_THROW_IF(ret < 0, "Failed to create Vulkan hwdevice context");
 
-    data->enc_frame = av_frame_alloc();
-    data->enc_frame->format = AV_PIX_FMT_YUV420P;
-    data->enc_frame->width = streamWidth;
-    data->enc_frame->height = streamHeight;
-    ret = av_frame_get_buffer(data->enc_frame, 32);
-    PW_THROW_IF(ret < 0, "Failed to get enc_frame frame buffer");
-    
+    // 2. Vulkan HW frames context (YUV420P format)
+    AVBufferRef *hw_frames_ref = av_hwframe_ctx_alloc(data->hw_device_ctx);
+    PW_THROW_IF(!hw_frames_ref, "Could not alloc Vulkan hwframe context");
 
-    data->encPkt = av_packet_alloc();
+    AVHWFramesContext *frames_ctx = (AVHWFramesContext *)hw_frames_ref->data;
+    frames_ctx->format = AV_PIX_FMT_VULKAN;
+    frames_ctx->sw_format = AV_PIX_FMT_NV12; // <-- CPU-side format
+    frames_ctx->width = streamWidth;
+    frames_ctx->height = streamHeight;
+    frames_ctx->initial_pool_size = 2;
+    ret = av_hwframe_ctx_init(hw_frames_ref);
+    PW_THROW_IF(ret < 0, "Failed to init Vulkan hwframe ctx");
 
-
-
-    int TARGET_FPS = data->fps; // DOSNT MATTER AT ALL
-
-
-    const AVCodec *encoder = avcodec_find_encoder(AV_CODEC_ID_H264);
+    // 3. Encoder config
+    const AVCodec *encoder = avcodec_find_encoder_by_name("h264_vulkan");
+    if (!encoder) encoder = avcodec_find_encoder(AV_CODEC_ID_H264);
     data->encCtx = avcodec_alloc_context3(encoder);
     data->encCtx->width = streamWidth;
     data->encCtx->height = streamHeight;
-    data->encCtx->pix_fmt = AV_PIX_FMT_YUV420P;
-    data->encCtx->time_base = AVRational{1, TARGET_FPS};
-    data->encCtx->framerate = AVRational{TARGET_FPS, 1};
-    data->encCtx->gop_size = TARGET_FPS;
+    data->encCtx->pix_fmt = AV_PIX_FMT_VULKAN;
+    data->encCtx->time_base = AVRational{1, (int)data->fps};
+    data->encCtx->framerate = AVRational{(int)data->fps, 1};
+    data->encCtx->gop_size = data->fps;
     data->encCtx->max_b_frames = 0;
-
-
-    // new
     data->encCtx->has_b_frames = 0;
     data->encCtx->flags |= AV_CODEC_FLAG_LOW_DELAY;
+    data->encCtx->hw_device_ctx = av_buffer_ref(data->hw_device_ctx);
+    data->encCtx->hw_frames_ctx = av_buffer_ref(hw_frames_ref);
 
+    // Optional: Rate control settings (not strictly required)
     AVDictionary *codec_opts = NULL;
     av_dict_set(&codec_opts, "preset", "ultrafast", 0);
-    // av_dict_set(&codec_opts, "tune", "zerolatency", 0); // TODO reenable!!!
-
+    // av_dict_set(&codec_opts, "tune", "zerolatency", 0);
+    av_dict_set(&codec_opts, "qp", "18", 0); // Optional: Fixed QP
 
     ret = avcodec_open2(data->encCtx, encoder, &codec_opts);
     av_dict_free(&codec_opts);
-
     PW_THROW_IF(ret < 0, "avcodec_open2 failed for encoder");
 
-    // Create swscale conversion context (RGBA -> YUV420P)
-    data->sws = sws_getContext(
-        width, height, AV_PIX_FMT_BGR0,
-        streamWidth, streamHeight, AV_PIX_FMT_YUV420P,
-        SWS_FAST_BILINEAR, nullptr, nullptr, nullptr
-    );
-    PW_THROW_IF(!data->sws, "sws_getContext failed");
-
-    // RTP FFmpeg output setup (same as your code)
+    // 4. RTP output setup (unchanged)
     data->rtpFmt = nullptr;
     ret = avformat_alloc_output_context2(&data->rtpFmt, nullptr, "rtp", nullptr);
     PW_THROW_IF(ret < 0 || !data->rtpFmt, "avformat_alloc_output_context2 failed");
-
     AVStream *rtpStream = avformat_new_stream(data->rtpFmt, nullptr);
     PW_THROW_IF(!rtpStream, "avformat_new_stream failed");
     avcodec_parameters_from_context(rtpStream->codecpar, data->encCtx);
@@ -83,14 +79,10 @@ static bool setup_libav_buffers(stateData *data) {
 
     int avio_buf_size = RTP_MTU + 256;
     uint8_t *avioBuffer = (uint8_t *)av_malloc(avio_buf_size);
-
-    AVIOContext *avio = avio_alloc_context(
-        avioBuffer, avio_buf_size, 1, data->track.get(), nullptr, rtp_avio_write, nullptr);
-
+    AVIOContext *avio = avio_alloc_context(avioBuffer, avio_buf_size, 1, data->track.get(), nullptr, rtp_avio_write, nullptr);
     data->rtpFmt->pb = avio;
     data->rtpFmt->packet_size = RTP_MTU;
     data->rtpFmt->flags |= AVFMT_FLAG_CUSTOM_IO;
-
     AVDictionary *opts = nullptr;
     av_dict_set(&opts, "payload_type", "96", 0);
     av_dict_set(&opts, "ssrc", std::to_string(SSRC).c_str(), 0);
@@ -98,44 +90,72 @@ static bool setup_libav_buffers(stateData *data) {
     av_dict_free(&opts);
     PW_THROW_IF(ret < 0, "avformat_write_header failed");
 
-    std::cout << "ALL BUFFERS ALLOCATED" << std::endl;
+    // 5. Buffer setup
+    // BGR0 input frame (CPU)
+    data->latest_frame = av_frame_alloc();
+    data->latest_frame->format = AV_PIX_FMT_BGR0;
+    data->latest_frame->width = width;
+    data->latest_frame->height = height;
+    ret = av_frame_get_buffer(data->latest_frame, 32);
+    PW_THROW_IF(ret < 0, "Failed to get latest_frame frame buffer");
 
+    // CPU-side intermediate YUV420P frame (for upload)
+    data->yuv_frame = av_frame_alloc();
+    data->yuv_frame->format = AV_PIX_FMT_NV12;
+    data->yuv_frame->width = streamWidth;
+    data->yuv_frame->height = streamHeight;
+    ret = av_frame_get_buffer(data->yuv_frame, 32);
+    PW_THROW_IF(ret < 0, "Failed to get yuv_frame frame buffer");
 
+    // Vulkan hw frame for encoder
+    data->hw_frame = av_frame_alloc();
+    data->hw_frame->format = AV_PIX_FMT_VULKAN;
+    data->hw_frame->width = streamWidth;
+    data->hw_frame->height = streamHeight;
+    data->hw_frame->hw_frames_ctx = av_buffer_ref(hw_frames_ref);
+    ret = av_hwframe_get_buffer(hw_frames_ref, data->hw_frame, 0);
+    PW_THROW_IF(ret < 0, "Failed to get GPU hw_frame buffer");
+
+    // Packet allocation
+    data->encPkt = av_packet_alloc();
+
+    // Swscale context for BGR0 -> YUV420P
+    data->sws = sws_getContext(
+        width, height, AV_PIX_FMT_BGR0,
+        streamWidth, streamHeight, AV_PIX_FMT_NV12,
+        SWS_FAST_BILINEAR, nullptr, nullptr, nullptr
+    );
+    PW_THROW_IF(!data->sws, "sws_getContext failed");
+
+    std::cout << "ALL BUFFERS ALLOCATED (with Vulkan backend/YUV420P)" << std::endl;
     return true;
 }
 
-
-
+// CPU conversion + upload + encode
 static void send_latest_data(stateData *data) {
-    // Convert RGBA -> YUV420P in-place
+    // Convert BGR0 -> YUV420P
     sws_scale(
         data->sws,
         data->latest_frame->data, data->latest_frame->linesize, 0, data->height,
-        data->enc_frame->data, data->enc_frame->linesize
+        data->yuv_frame->data, data->yuv_frame->linesize
     );
-    data->enc_frame->pts = data->frame_pts++;
+    data->yuv_frame->pts = data->frame_pts++;
 
-#if send_instantly
-    int64_t now_us = av_gettime();
-    data->enc_frame->pts =
-        av_rescale_q(now_us, AVRational{1,1000000}, data->encCtx->time_base);
+    // Upload YUV420P (CPU) to Vulkan (GPU)
+    data->hw_frame->pts = data->yuv_frame->pts;
+    int ret = av_hwframe_transfer_data(data->hw_frame, data->yuv_frame, 0);
+    PW_THROW_IF(ret < 0, "av_hwframe_transfer_data failed (YUV420P CPU->Vulkan)");
 
-#endif
-
-    // Encode and stream as before:
-    avcodec_send_frame(data->encCtx, data->enc_frame);
+    // Encode as usual
+    avcodec_send_frame(data->encCtx, data->hw_frame);
     while (avcodec_receive_packet(data->encCtx, data->encPkt) == 0) {
-        // printf("Sending frame remote\n");
         try {
-            if (data->encPkt) // !just_cleared && 
+            if (data->encPkt)
                 av_write_frame(data->rtpFmt, data->encPkt);
-        
             if (data->rtpFmt && data->rtpFmt->pb)
-                avio_flush(data->rtpFmt->pb); // force immediate write to AVIO callback
+                avio_flush(data->rtpFmt->pb);
             av_packet_unref(data->encPkt);
-        }
-        catch (const std::runtime_error& e) {
-            // Catch the specific exception type
+        } catch (const std::runtime_error& e) {
             std::cerr << "Caught a runtime error: " << e.what() << std::endl;
         }
     }

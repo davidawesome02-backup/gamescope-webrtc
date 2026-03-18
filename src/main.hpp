@@ -35,7 +35,7 @@ extern "C" {
 #include <vector>
 #include <filesystem>
 
-
+#include <vulkan/vulkan.h>
 
 const uint32_t SSRC = 42;
 const int RTP_MTU = 1200;
@@ -94,6 +94,20 @@ typedef struct {
         std::shared_ptr<rtc::WebSocket> connection_open_socket;
         std::shared_ptr<std::string> connection_code;
         std::shared_ptr<std::string> ICE_offer_str;
+
+
+         // Vulkan-specific members
+        // VkInstance vkInstance = VK_NULL_HANDLE;
+        // VkDevice vkDevice = VK_NULL_HANDLE;
+        // VkQueue vkQueue = VK_NULL_HANDLE;
+        // VkCommandPool vkCommandPool = VK_NULL_HANDLE;
+        // VkCommandBuffer vkCommandBuffer = VK_NULL_HANDLE;
+
+        AVBufferRef *device_ctx;
+        AVBufferRef *hw_device_ctx;
+
+        AVFrame *hw_frame;
+        AVFrame *yuv_frame; 
 
 
 

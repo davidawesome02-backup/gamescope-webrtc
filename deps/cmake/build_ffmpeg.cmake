@@ -57,17 +57,22 @@ ExternalProject_Add(ffmpeg_build
         # --enable-encoder=libx264
         # --enable-encoder=libx264rgb
         --enable-encoder=h264
+        --enable-encoder=h264_vaapi
 
         --enable-hwaccel=h264_vulkan
         --enable-encoder=h264_vulkan
 
         # --enable-libx264
-        --enable-vulkan
+        --enable-vulkan # not real?
+        # --enable-vulkan-static
+        # --enable-vaapi
         --enable-gpl
 
 
         # containers
         --enable-muxer=flv
+        --enable-muxer=rtp
+        --enable-muxer=rtp_mpegts
         # --enable-demuxer=flv
 
         # streaming
