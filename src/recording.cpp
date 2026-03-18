@@ -93,19 +93,11 @@ static bool setup_libav_buffers(stateData *data) {
     // 5. Buffer setup
     // BGR0 input frame (CPU)
     data->latest_frame = av_frame_alloc();
-    data->latest_frame->format = AV_PIX_FMT_BGR0;
+    data->latest_frame->format = AV_PIX_FMT_NV12;//AV_PIX_FMT_BGR0;
     data->latest_frame->width = width;
     data->latest_frame->height = height;
     ret = av_frame_get_buffer(data->latest_frame, 32);
     PW_THROW_IF(ret < 0, "Failed to get latest_frame frame buffer");
-
-    // CPU-side intermediate YUV420P frame (for upload)
-    data->yuv_frame = av_frame_alloc();
-    data->yuv_frame->format = AV_PIX_FMT_NV12;
-    data->yuv_frame->width = streamWidth;
-    data->yuv_frame->height = streamHeight;
-    ret = av_frame_get_buffer(data->yuv_frame, 32);
-    PW_THROW_IF(ret < 0, "Failed to get yuv_frame frame buffer");
 
     // Vulkan hw frame for encoder
     data->hw_frame = av_frame_alloc();
@@ -119,31 +111,17 @@ static bool setup_libav_buffers(stateData *data) {
     // Packet allocation
     data->encPkt = av_packet_alloc();
 
-    // Swscale context for BGR0 -> YUV420P
-    data->sws = sws_getContext(
-        width, height, AV_PIX_FMT_BGR0,
-        streamWidth, streamHeight, AV_PIX_FMT_NV12,
-        SWS_FAST_BILINEAR, nullptr, nullptr, nullptr
-    );
-    PW_THROW_IF(!data->sws, "sws_getContext failed");
-
     std::cout << "ALL BUFFERS ALLOCATED (with Vulkan backend/YUV420P)" << std::endl;
     return true;
 }
 
 // CPU conversion + upload + encode
 static void send_latest_data(stateData *data) {
-    // Convert BGR0 -> YUV420P
-    sws_scale(
-        data->sws,
-        data->latest_frame->data, data->latest_frame->linesize, 0, data->height,
-        data->yuv_frame->data, data->yuv_frame->linesize
-    );
-    data->yuv_frame->pts = data->frame_pts++;
+    data->latest_frame->pts = data->frame_pts++;
 
     // Upload YUV420P (CPU) to Vulkan (GPU)
-    data->hw_frame->pts = data->yuv_frame->pts;
-    int ret = av_hwframe_transfer_data(data->hw_frame, data->yuv_frame, 0);
+    data->hw_frame->pts = data->latest_frame->pts;
+    int ret = av_hwframe_transfer_data(data->hw_frame, data->latest_frame, 0);
     PW_THROW_IF(ret < 0, "av_hwframe_transfer_data failed (YUV420P CPU->Vulkan)");
 
     // Encode as usual
@@ -180,6 +158,7 @@ static void on_param_changed(void *userdata, uint32_t id, const struct spa_pod *
         printf("Format requested!\n");
         if (param == NULL || id != SPA_PARAM_Format) {
                 printf("\tFormat parameter not specifed, %d  %p\n", id, param);
+                if (id == 4 && param == NULL) exit(0); // Exit if no more stream. TODO: exit if pid not found mby..?
                 return;
         }
 
@@ -208,13 +187,15 @@ static void on_param_changed(void *userdata, uint32_t id, const struct spa_pod *
         printf("  size: %dx%d\n", data->format.info.raw.size.width,
                         data->format.info.raw.size.height);
 
-        int prescaled_height = data->format.info.raw.size.height&(~1); // Make even line count, rounds down to prevent errors in h264 
-        int prescaled_width = data->format.info.raw.size.width&(~1); // Make even line count, rounds down to prevent errors in h264 
+        // int prescaled_height = data->format.info.raw.size.height
+        // int prescaled_width = data->format.info.raw.size.width&(~1); // Make even line count, rounds down to prevent errors in h264 
         data->real_width = data->format.info.raw.size.width;
-        data->height = prescaled_height;
-        data->width = prescaled_width;
-        data->streamHeight = prescaled_height;
-        data->streamWidth = prescaled_width;
+
+        data->height = data->format.info.raw.size.height;
+        data->width = data->format.info.raw.size.width;
+
+        data->streamHeight = data->format.info.raw.size.height;
+        data->streamWidth = data->format.info.raw.size.width;
                     
         printf("  framerate: %d/%d\n", data->format.info.raw.framerate.num,
                         data->format.info.raw.framerate.denom);
@@ -253,8 +234,6 @@ static void on_process(void *userdata) {
 
         // Source pointer and stride (assume RGBA)
         uint8_t *src = (uint8_t*)spa_buffer->datas[0].data;
-        int stride = data->real_width * 4;
-
         int just_cleared = false;
 
 
@@ -301,10 +280,11 @@ static void on_process(void *userdata) {
         }
 
         // Copy lines into latest_frame
-        for (int y = 0; y < data->height; ++y) {
-            memcpy(data->latest_frame->data[0] + y * data->latest_frame->linesize[0],
-                src + y * stride, stride);
-        }
+        // for (int y = 0; y < data->height; ++y) {
+        //     memcpy(data->latest_frame->data[0] + y * data->latest_frame->linesize[0],
+        //         src + y * stride, stride);
+        // }
+        memcpy(data->latest_frame->data[0], src, spa_buffer->datas[0].maxsize);
 
         #if send_instantly
         send_latest_data(data);
@@ -427,7 +407,7 @@ void prepare_recording(stateData *data, int targetPid) {
                 SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
                 SPA_FORMAT_mediaType,       SPA_POD_Id(SPA_MEDIA_TYPE_video),
                 SPA_FORMAT_mediaSubtype,    SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
-                SPA_FORMAT_VIDEO_format,    SPA_POD_CHOICE_ENUM_Id(2, SPA_VIDEO_FORMAT_BGRx, SPA_VIDEO_FORMAT_BGRx),
+                SPA_FORMAT_VIDEO_format,    SPA_POD_CHOICE_ENUM_Id(2, SPA_VIDEO_FORMAT_NV12, SPA_VIDEO_FORMAT_NV12),
                 SPA_FORMAT_VIDEO_size,      SPA_POD_CHOICE_RANGE_Rectangle(
                     &data->pw_connect_params.default_size,
                     &data->pw_connect_params.min_size,
