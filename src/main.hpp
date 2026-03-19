@@ -23,6 +23,7 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavutil/avutil.h>
 #include <libavutil/frame.h>
+#include <libavutil/opt.h>
 #include <libswscale/swscale.h>
 
 #include <linux/uinput.h>
@@ -105,11 +106,14 @@ typedef struct {
 
         AVBufferRef *device_ctx;
         AVBufferRef *hw_device_ctx;
+        AVBufferRef *hw_frames_ctx;
 
         AVFrame *hw_frame;
-        AVFrame *yuv_frame; 
 
-
+        bool pipeline_ready;
+        bool force_keyframe;
+        
+        int64_t last_dts = -1;
 
         spa_hook registry_listener;
         spa_hook core_listener;

@@ -20,6 +20,29 @@ int rtp_avio_write(void *opaque, const uint8_t *buf, int buf_size) {
     
 }
 
+void recreate_webrtc_track(stateData *data) {
+    std::cout << "Recreating WebRTC track due to resize..." << std::endl;
+
+    if (data->track) {
+        try {
+            data->track->close(); // stop old stream
+        } catch (...) {}
+    }
+
+    // Create new media description
+    rtc::Description::Video media("video", rtc::Description::Direction::SendOnly);
+    media.addH264Codec(96);
+
+    // You can reuse SSRC or generate a new one
+    media.addSSRC(rand(), "video-send");
+
+    data->track = data->pc_connection->addTrack(media);
+
+    data->pc_connection->setLocalDescription();
+
+    std::cout << "New track created" << std::endl;
+}
+
 static void recive_data_message(stateData *data, rtc::message_variant recived) {
     if (!std::holds_alternative<rtc::binary>(recived)) return;
     auto bin_data = std::get<rtc::binary>(recived);
