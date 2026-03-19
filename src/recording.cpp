@@ -44,7 +44,8 @@ static bool setup_libav_buffers(stateData *data) {
 
     // 3. Encoder config
     const AVCodec *encoder = avcodec_find_encoder_by_name("h264_vulkan");
-    if (!encoder) encoder = avcodec_find_encoder(AV_CODEC_ID_H264);
+    PW_THROW_IF(!encoder, "Failed to get h264_vulkan encoder");
+
     data->encCtx = avcodec_alloc_context3(encoder);
     data->encCtx->width = streamWidth;
     data->encCtx->height = streamHeight;
@@ -55,6 +56,7 @@ static bool setup_libav_buffers(stateData *data) {
     data->encCtx->max_b_frames = 0;
     data->encCtx->has_b_frames = 0;
     data->encCtx->flags |= AV_CODEC_FLAG_LOW_DELAY;
+    // av_opt_set(data->encCtx->priv_data, "repeat_headers", "0", 0);
     data->encCtx->hw_device_ctx = av_buffer_ref(data->hw_device_ctx);
     data->encCtx->hw_frames_ctx = av_buffer_ref(hw_frames_ref);
 
@@ -91,9 +93,8 @@ static bool setup_libav_buffers(stateData *data) {
     PW_THROW_IF(ret < 0, "avformat_write_header failed");
 
     // 5. Buffer setup
-    // BGR0 input frame (CPU)
     data->latest_frame = av_frame_alloc();
-    data->latest_frame->format = AV_PIX_FMT_NV12;//AV_PIX_FMT_BGR0;
+    data->latest_frame->format = AV_PIX_FMT_NV12;
     data->latest_frame->width = width;
     data->latest_frame->height = height;
     ret = av_frame_get_buffer(data->latest_frame, 32);
@@ -111,7 +112,7 @@ static bool setup_libav_buffers(stateData *data) {
     // Packet allocation
     data->encPkt = av_packet_alloc();
 
-    std::cout << "ALL BUFFERS ALLOCATED (with Vulkan backend/YUV420P)" << std::endl;
+    std::cout << "ALL BUFFERS ALLOCATED" << std::endl;
     return true;
 }
 
@@ -119,10 +120,10 @@ static bool setup_libav_buffers(stateData *data) {
 static void send_latest_data(stateData *data) {
     data->latest_frame->pts = data->frame_pts++;
 
-    // Upload YUV420P (CPU) to Vulkan (GPU)
+    // Upload NV12 (CPU) to Vulkan (GPU)
     data->hw_frame->pts = data->latest_frame->pts;
     int ret = av_hwframe_transfer_data(data->hw_frame, data->latest_frame, 0);
-    PW_THROW_IF(ret < 0, "av_hwframe_transfer_data failed (YUV420P CPU->Vulkan)");
+    PW_THROW_IF(ret < 0, "av_hwframe_transfer_data failed (NV12 CPU->Vulkan)");
 
     // Encode as usual
     avcodec_send_frame(data->encCtx, data->hw_frame);
@@ -223,7 +224,6 @@ static void on_process(void *userdata) {
 
         auto spa_buffer = b->buffer;
 
-        // printf("got a frame of size %d type: %d\n", spa_buffer->datas[0].chunk->size, spa_buffer->datas[0].type);
         if (!spa_buffer || !spa_buffer->datas[0].data) {
             // Return the buffer to the stream and exit
             // Currently this fails on PID for some reason??
@@ -232,8 +232,6 @@ static void on_process(void *userdata) {
             return;
         }
 
-        // Source pointer and stride (assume RGBA)
-        uint8_t *src = (uint8_t*)spa_buffer->datas[0].data;
         int just_cleared = false;
 
 
@@ -279,12 +277,11 @@ static void on_process(void *userdata) {
             }
         }
 
-        // Copy lines into latest_frame
-        // for (int y = 0; y < data->height; ++y) {
-        //     memcpy(data->latest_frame->data[0] + y * data->latest_frame->linesize[0],
-        //         src + y * stride, stride);
-        // }
-        memcpy(data->latest_frame->data[0], src, spa_buffer->datas[0].maxsize);
+
+        auto frame_single_size = data->width*data->height;
+        memcpy(data->latest_frame->data[0], (uint8_t*)spa_buffer->datas[0].data                    , frame_single_size  );
+        memcpy(data->latest_frame->data[1], (uint8_t*)spa_buffer->datas[0].data + frame_single_size, frame_single_size/2);
+
 
         #if send_instantly
         send_latest_data(data);
