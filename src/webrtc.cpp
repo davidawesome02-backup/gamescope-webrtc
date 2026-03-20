@@ -100,6 +100,7 @@ void setup_RTC(stateData *data, bool create_code, std::string url_base) {
     
     pc->onStateChange([](rtc::PeerConnection::State state) {
         std::cout << "State: " << state << std::endl; // Todo if closing, reoffer connection stuff
+        if (state == rtc::PeerConnection::State::Closed || state == rtc::PeerConnection::State::Failed || state == rtc::PeerConnection::State::Disconnected) {exit(0);}
     });
     pc->onGatheringStateChange([data, pc, url_base, create_code](rtc::PeerConnection::GatheringState state) {
         if (state == rtc::PeerConnection::GatheringState::Complete) {
@@ -115,6 +116,8 @@ void setup_RTC(stateData *data, bool create_code, std::string url_base) {
             std::string msg_as_b32 = b32enc(msg_as_str);
 
             if (create_code) {
+                data->ws_should_close = false;
+
                 std::string url = url_base+"?offer="+msg_as_b32;
                 
                 data->connection_open_socket = std::make_shared<rtc::WebSocket>();
@@ -137,13 +140,16 @@ void setup_RTC(stateData *data, bool create_code, std::string url_base) {
                     json j = json::parse(container_json["accept"].get<std::string>());
                     rtc::Description answer(j["sdp"].get<std::string>(), j["type"].get<std::string>());
                     pc->setRemoteDescription(answer);
+
+                    data->ws_should_close = true;
                 });
 
                 data->connection_open_socket.get()->onOpen([pc](void){
                     std::cout << "Opened ws!" << std::endl;
                 });
-                data->connection_open_socket.get()->onClosed([pc](void){
+                data->connection_open_socket.get()->onClosed([pc, data](void){
                     std::cout << "Closed ws!" << std::endl;
+                    if (!data->ws_should_close) exit(0);
                 });
                 data->connection_open_socket.get()->onError([pc](std::string error){
                     std::cout << "Error ws!: "+error << std::endl;

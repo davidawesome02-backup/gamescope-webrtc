@@ -188,8 +188,12 @@ static void on_param_changed(void *userdata, uint32_t id, const struct spa_pod *
     if (data->format.media_type != SPA_MEDIA_TYPE_video || data->format.media_subtype != SPA_MEDIA_SUBTYPE_raw) return;
     if (spa_format_video_raw_parse(param, &data->format.info.raw) < 0) return;
 
-    data->height = data->format.info.raw.size.height & (~1);
-    data->width = data->format.info.raw.size.width & (~1);
+    data->height = data->format.info.raw.size.height;// & (~1);
+    data->width = (data->format.info.raw.size.width) & ~3;// & (~1);
+    // data->width = (data->format.info.raw.size.width+1) & ~1;// & (~1);
+
+    data->real_width = (data->format.info.raw.size.width+3) & ~3;// & (~1);
+
     data->streamHeight = data->height;
     data->streamWidth = data->width;
 
@@ -212,7 +216,11 @@ static void on_process(void *userdata) {
 
     // 🔥 RESIZE HANDLING
     if (!data->latest_frame || data->latest_frame->width != data->width || data->latest_frame->height != data->height) {
-        std::cout << "FREEING ENCODER/FRAMES FOR RESIZE\n";
+        std::cout << "FREEING ENCODER/FRAMES FOR RESIZE" << std::endl;
+
+        // data->width = data->latest_frame->width;
+        // data->height = data->latest_frame->height;
+
 
         data->pipeline_ready = false;
 
@@ -236,9 +244,43 @@ static void on_process(void *userdata) {
         return;
     }
 
-    size_t size = data->width * data->height;
-    memcpy(data->latest_frame->data[0], spa_buffer->datas[0].data, size);
-    memcpy(data->latest_frame->data[1], (uint8_t*)spa_buffer->datas[0].data + size, size / 2);
+    // size_t size = data->width * data->height;
+    // size_t size = data->latest_frame->width * data->latest_frame->height;//data->width * data->height;
+    // memcpy(data->latest_frame->data[0], spa_buffer->datas[0].data, size);
+    // memcpy(data->latest_frame->data[1], (uint8_t*)spa_buffer->datas[0].data + size, size / 2);
+
+    // for (int y = 0; y < data->latest_frame->height; ++y)
+    //     memcpy(data->latest_frame->data[0] + y * data->latest_frame->linesize[0],
+    //        spa_buffer->datas[0].data + y * data->width,
+    //        data->width);
+
+    // for (int y = 0; y < data->latest_frame->height/2; ++y)
+    //     memcpy(data->latest_frame->data[1] + y * data->latest_frame->linesize[1],
+    //         spa_buffer->datas[0].data + size + y * (data->width),
+    //         data->width);
+
+
+    size_t y_size = data->real_width * data->height;
+    uint8_t *src = (uint8_t*)spa_buffer->datas[0].data;
+
+    // Copy Y plane
+    for (int y = 0; y < data->height; ++y) {
+        memcpy(
+            data->latest_frame->data[0] + y * data->latest_frame->linesize[0],
+            src + y * data->real_width,
+            data->real_width
+        );
+    }
+
+    // std::cout << "Line size: " << data->latest_frame->linesize[1] << " and real: " << data->real_width << std::endl;
+    // Copy UV plane
+    for (int y = 0; y < data->height/2; ++y) {
+        memcpy(
+            data->latest_frame->data[1] + y * data->latest_frame->linesize[1],
+            src + y_size + y * data->real_width,
+            data->real_width
+        );
+    }
 
 #if send_instantly
     send_latest_data(data);

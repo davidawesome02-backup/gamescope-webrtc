@@ -71,6 +71,7 @@ typedef struct {
         std::shared_ptr<rtc::PeerConnection> pc_connection;
         std::shared_ptr<rtc::Track> track;
         std::shared_ptr<rtc::DataChannel> datatrack;
+        bool ws_should_close;
 
 
 
