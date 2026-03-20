@@ -113,6 +113,7 @@ typedef struct {
 
         bool pipeline_ready;
         bool force_keyframe;
+        bool last_force_keyframe;
         
         int64_t last_dts = -1;
 

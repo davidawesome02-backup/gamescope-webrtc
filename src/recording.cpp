@@ -6,21 +6,12 @@
 
 #define PW_THROW_IF(cond, msg) if (cond) throw std::runtime_error(msg);
 
-// =========================
-// SETUP LIBAV BUFFERS
-// =========================
 static bool setup_libav_buffers(stateData *data) {
     int ret = 0;
 
-    // -----------------------
-    // Vulkan device
-    // -----------------------
     ret = av_hwdevice_ctx_create(&data->hw_device_ctx, AV_HWDEVICE_TYPE_VULKAN, NULL, NULL, 0);
     PW_THROW_IF(ret < 0, "Failed to create Vulkan hwdevice context");
 
-    // -----------------------
-    // HW frames
-    // -----------------------
     data->hw_frames_ctx = av_hwframe_ctx_alloc(data->hw_device_ctx);
     PW_THROW_IF(!data->hw_frames_ctx, "Could not alloc Vulkan hwframe context");
 
@@ -34,9 +25,6 @@ static bool setup_libav_buffers(stateData *data) {
     ret = av_hwframe_ctx_init(data->hw_frames_ctx);
     PW_THROW_IF(ret < 0, "Failed to init Vulkan hwframe ctx");
 
-    // -----------------------
-    // Encoder
-    // -----------------------
     const AVCodec *encoder = avcodec_find_encoder_by_name("h264_vulkan");
     PW_THROW_IF(!encoder, "Failed to get h264_vulkan encoder");
 
@@ -48,7 +36,7 @@ static bool setup_libav_buffers(stateData *data) {
     data->encCtx->framerate = AVRational{(int)data->fps, 1};
     data->encCtx->gop_size = data->fps;
     data->encCtx->max_b_frames = 0;
-    av_opt_set(data->encCtx->priv_data, "repeat_headers", "1", 0);
+    av_opt_set(data->encCtx->priv_data, "repeat_headers", "0", 0);
     data->encCtx->flags |= AV_CODEC_FLAG_LOW_DELAY;
 
     data->encCtx->hw_device_ctx = av_buffer_ref(data->hw_device_ctx);
@@ -62,9 +50,6 @@ static bool setup_libav_buffers(stateData *data) {
     av_dict_free(&codec_opts);
     PW_THROW_IF(ret < 0, "avcodec_open2 failed");
 
-    // -----------------------
-    // WebRTC track (only once)
-    // -----------------------
     if (!data->track) {
         rtc::Description::Video media("video", rtc::Description::Direction::SendOnly);
         media.addH264Codec(96);
@@ -73,9 +58,6 @@ static bool setup_libav_buffers(stateData *data) {
         data->pc_connection->setLocalDescription();
     }
 
-    // -----------------------
-    // RTP output (only once)
-    // -----------------------
     if (!data->rtpFmt) {
         ret = avformat_alloc_output_context2(&data->rtpFmt, nullptr, "rtp", nullptr);
         PW_THROW_IF(ret < 0 || !data->rtpFmt, "rtp ctx failed");
@@ -112,9 +94,6 @@ static bool setup_libav_buffers(stateData *data) {
         PW_THROW_IF(ret < 0, "write header failed");
     }
 
-    // -----------------------
-    // Frames
-    // -----------------------
     data->latest_frame = av_frame_alloc();
     data->latest_frame->format = AV_PIX_FMT_NV12;
     data->latest_frame->width = data->width;
@@ -136,9 +115,6 @@ static bool setup_libav_buffers(stateData *data) {
     return true;
 }
 
-// =========================
-// SEND LATEST FRAME
-// =========================
 static void send_latest_data(stateData *data) {
     if (!data->pipeline_ready) return;
 
@@ -148,6 +124,15 @@ static void send_latest_data(stateData *data) {
     int ret = av_hwframe_transfer_data(data->hw_frame, data->latest_frame, 0);
     PW_THROW_IF(ret < 0, "hw transfer failed");
 
+    if (data->last_force_keyframe != data->force_keyframe) {
+        if (data->force_keyframe) {
+            av_opt_set(data->encCtx->priv_data, "repeat_headers", "1", 0);
+        } else {
+            av_opt_set(data->encCtx->priv_data, "repeat_headers", "0", 0);
+        }
+    }
+
+    data->last_force_keyframe = data->force_keyframe;
     if (data->force_keyframe) {
         data->hw_frame->pict_type = AV_PICTURE_TYPE_I;
         data->force_keyframe = false;
@@ -177,9 +162,6 @@ static void send_frame_timer(void *userdata, long unsigned int a) {
         send_latest_data(data);
 }
 
-// =========================
-// HANDLE FORMAT CHANGES
-// =========================
 static void on_param_changed(void *userdata, uint32_t id, const struct spa_pod *param) {
     stateData *data = (stateData *)userdata;
     if (!param || id != SPA_PARAM_Format) return;
@@ -188,11 +170,9 @@ static void on_param_changed(void *userdata, uint32_t id, const struct spa_pod *
     if (data->format.media_type != SPA_MEDIA_TYPE_video || data->format.media_subtype != SPA_MEDIA_SUBTYPE_raw) return;
     if (spa_format_video_raw_parse(param, &data->format.info.raw) < 0) return;
 
-    data->height = data->format.info.raw.size.height;// & (~1);
-    data->width = (data->format.info.raw.size.width) & ~3;// & (~1);
-    // data->width = (data->format.info.raw.size.width+1) & ~1;// & (~1);
-
-    data->real_width = (data->format.info.raw.size.width+3) & ~3;// & (~1);
+    data->height = data->format.info.raw.size.height;
+    data->width = (data->format.info.raw.size.width) & ~3;
+    data->real_width = (data->format.info.raw.size.width+3) & ~3;
 
     data->streamHeight = data->height;
     data->streamWidth = data->width;
@@ -200,9 +180,6 @@ static void on_param_changed(void *userdata, uint32_t id, const struct spa_pod *
     std::cout << "Format changed to " << data->width << "x" << data->height << std::endl;
 }
 
-// =========================
-// PROCESS FRAME
-// =========================
 static void on_process(void *userdata) {
     stateData *data = (stateData *) userdata;
     struct pw_buffer *b = pw_stream_dequeue_buffer(data->stream);
@@ -214,12 +191,8 @@ static void on_process(void *userdata) {
         return;
     }
 
-    // 🔥 RESIZE HANDLING
     if (!data->latest_frame || data->latest_frame->width != data->width || data->latest_frame->height != data->height) {
         std::cout << "FREEING ENCODER/FRAMES FOR RESIZE" << std::endl;
-
-        // data->width = data->latest_frame->width;
-        // data->height = data->latest_frame->height;
 
 
         data->pipeline_ready = false;
@@ -237,30 +210,14 @@ static void on_process(void *userdata) {
         av_packet_free(&data->encPkt);
 
         data->latest_frame = nullptr;
-        // data->frame_pts = 0;
-
+        
         setup_libav_buffers(data); // rebuild only encoder + frames
         pw_stream_queue_buffer(data->stream, b);
         return;
     }
 
-    // size_t size = data->width * data->height;
-    // size_t size = data->latest_frame->width * data->latest_frame->height;//data->width * data->height;
-    // memcpy(data->latest_frame->data[0], spa_buffer->datas[0].data, size);
-    // memcpy(data->latest_frame->data[1], (uint8_t*)spa_buffer->datas[0].data + size, size / 2);
 
-    // for (int y = 0; y < data->latest_frame->height; ++y)
-    //     memcpy(data->latest_frame->data[0] + y * data->latest_frame->linesize[0],
-    //        spa_buffer->datas[0].data + y * data->width,
-    //        data->width);
-
-    // for (int y = 0; y < data->latest_frame->height/2; ++y)
-    //     memcpy(data->latest_frame->data[1] + y * data->latest_frame->linesize[1],
-    //         spa_buffer->datas[0].data + size + y * (data->width),
-    //         data->width);
-
-
-    size_t y_size = data->real_width * data->height;
+    size_t full_frame_size = data->real_width * data->height;
     uint8_t *src = (uint8_t*)spa_buffer->datas[0].data;
 
     // Copy Y plane
@@ -272,12 +229,10 @@ static void on_process(void *userdata) {
         );
     }
 
-    // std::cout << "Line size: " << data->latest_frame->linesize[1] << " and real: " << data->real_width << std::endl;
-    // Copy UV plane
     for (int y = 0; y < data->height/2; ++y) {
         memcpy(
             data->latest_frame->data[1] + y * data->latest_frame->linesize[1],
-            src + y_size + y * data->real_width,
+            src + full_frame_size + y * data->real_width,
             data->real_width
         );
     }
@@ -428,7 +383,7 @@ void prepare_recording(stateData *data, int targetPid) {
                 nullptr, 0);
             if (!context) {
                 std::cerr << "Failed to create context\n";
-                return;// 1;
+                return;
             }
 
             pw_core *core = pw_context_connect(context, nullptr, 0);
