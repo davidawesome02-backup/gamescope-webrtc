@@ -1,6 +1,29 @@
 #include "lib.h"
 #include "main.hpp"
 
+void exit_streaming(stateData* data) {
+    std::cout << "Ending connections, then closing" << std::endl;
+    if (data->loop) {
+        pw_main_loop_quit(data->loop);
+        // pw_loop_destroy(data->loop);
+    }
+    
+    try {
+        if (data->connection_open_socket && data->connection_open_socket.get()) {
+            data->connection_open_socket.get()->close();
+        }
+
+        if (data->datatrack && data->datatrack.get() && data->datatrack.get()->isOpen()) {
+            data->datatrack.get()->send("{'type':'exiting'}"); // Like the only thing I can do that is force sent before closing
+            data->datatrack.get()->close();
+        }
+
+        if (data->pc_connection && data->pc_connection.get()) {
+            data->pc_connection.get()->close();
+        }
+    } catch (...) {}
+}
+
 static gamescope_webrtc_ctx* int_gamescope_webrtc_init(bool kbm, bool ctrl) {
     gamescope_webrtc_ctx* allocated_ctx = (gamescope_webrtc_ctx*) calloc(1, sizeof(gamescope_webrtc_ctx));
     stateData* internal_ctx = new stateData();

@@ -18,8 +18,8 @@ static bool setup_libav_buffers(stateData *data) {
     AVHWFramesContext *frames_ctx = (AVHWFramesContext *)data->hw_frames_ctx->data;
     frames_ctx->format = AV_PIX_FMT_VULKAN;
     frames_ctx->sw_format = AV_PIX_FMT_NV12;
-    frames_ctx->width = data->streamWidth;
-    frames_ctx->height = data->streamHeight;
+    frames_ctx->width = data->width;
+    frames_ctx->height = data->height;
     frames_ctx->initial_pool_size = 4;
 
     ret = av_hwframe_ctx_init(data->hw_frames_ctx);
@@ -29,8 +29,8 @@ static bool setup_libav_buffers(stateData *data) {
     PW_THROW_IF(!encoder, "Failed to get h264_vulkan encoder");
 
     data->encCtx = avcodec_alloc_context3(encoder);
-    data->encCtx->width = data->streamWidth;
-    data->encCtx->height = data->streamHeight;
+    data->encCtx->width = data->width;
+    data->encCtx->height = data->height;
     data->encCtx->pix_fmt = AV_PIX_FMT_VULKAN;
     data->encCtx->time_base = AVRational{1, (int)data->fps};
     data->encCtx->framerate = AVRational{(int)data->fps, 1};
@@ -44,6 +44,7 @@ static bool setup_libav_buffers(stateData *data) {
 
     AVDictionary *codec_opts = NULL;
     av_dict_set(&codec_opts, "preset", "ultrafast", 0);
+    // av_dict_set(&codec_opts, "qp", "0", 0);
     av_dict_set(&codec_opts, "qp", "18", 0);
 
     ret = avcodec_open2(data->encCtx, encoder, &codec_opts);
@@ -118,8 +119,7 @@ static bool setup_libav_buffers(stateData *data) {
 static void send_latest_data(stateData *data) {
     if (!data->pipeline_ready) return;
 
-    data->latest_frame->pts = data->frame_pts++;
-    data->hw_frame->pts = data->latest_frame->pts;
+    data->hw_frame->pts = data->latest_frame->pts = data->frame_pts++;
 
     int ret = av_hwframe_transfer_data(data->hw_frame, data->latest_frame, 0);
     PW_THROW_IF(ret < 0, "hw transfer failed");
@@ -143,11 +143,6 @@ static void send_latest_data(stateData *data) {
     avcodec_send_frame(data->encCtx, data->hw_frame);
 
     while (avcodec_receive_packet(data->encCtx, data->encPkt) == 0) {
-
-        if (data->encPkt->dts <= data->last_dts) {
-            data->encPkt->dts = data->last_dts + 1;
-        }
-
         try {
             av_write_frame(data->rtpFmt, data->encPkt);
             avio_flush(data->rtpFmt->pb);
@@ -156,7 +151,7 @@ static void send_latest_data(stateData *data) {
     }
 }
 
-static void send_frame_timer(void *userdata, long unsigned int a) {
+static void send_frame_timer(void *userdata, long unsigned int) {
     stateData *data = (stateData *)userdata;
     if (data->latest_frame)
         send_latest_data(data);
@@ -166,16 +161,13 @@ static void on_param_changed(void *userdata, uint32_t id, const struct spa_pod *
     stateData *data = (stateData *)userdata;
     if (!param || id != SPA_PARAM_Format) return;
 
-    if (spa_format_parse(param, &data->format.media_type, &data->format.media_subtype) < 0) return;
-    if (data->format.media_type != SPA_MEDIA_TYPE_video || data->format.media_subtype != SPA_MEDIA_SUBTYPE_raw) return;
-    if (spa_format_video_raw_parse(param, &data->format.info.raw) < 0) return;
+    if (spa_format_parse(param, &data->pw_req_format.media_type, &data->pw_req_format.media_subtype) < 0) return;
+    if (data->pw_req_format.media_type != SPA_MEDIA_TYPE_video || data->pw_req_format.media_subtype != SPA_MEDIA_SUBTYPE_raw) return;
+    if (spa_format_video_raw_parse(param, &data->pw_req_format.info.raw) < 0) return;
 
-    data->height = data->format.info.raw.size.height;
-    data->width = (data->format.info.raw.size.width) & ~3;
-    data->real_width = (data->format.info.raw.size.width+3) & ~3;
-
-    data->streamHeight = data->height;
-    data->streamWidth = data->width;
+    data->height = data->pw_req_format.info.raw.size.height;
+    data->width = (data->pw_req_format.info.raw.size.width) & ~3;
+    data->real_width = (data->pw_req_format.info.raw.size.width+3) & ~3;
 
     std::cout << "Format changed to " << data->width << "x" << data->height << std::endl;
 }
@@ -244,13 +236,41 @@ static void on_process(void *userdata) {
     pw_stream_queue_buffer(data->stream, b);
 }
 
+
+static void on_state_changed(void *userdata, pw_stream_state old, pw_stream_state state, const char *error) {
+    stateData *data = (stateData *) userdata;
+
+    if (state == PW_STREAM_STATE_ERROR) std::cout << "PW error: " << error << std::endl;
+
+    if (
+        state == PW_STREAM_STATE_PAUSED     ||
+        state == PW_STREAM_STATE_ERROR      ||
+        state == PW_STREAM_STATE_UNCONNECTED
+    ) {
+        data->pw_disconnect_time = std::time(0);
+    } else {
+        data->pw_disconnect_time = 0;
+    }
+}
+
 static const struct pw_stream_events stream_events = {
     PW_VERSION_STREAM_EVENTS,
+    .state_changed = on_state_changed,
     .param_changed = on_param_changed,
     .process = on_process,
 };
 
 
+static void check_recording_disconnect(void *userdata, unsigned long) {
+    stateData *data = (stateData *) userdata;
+
+    if (data->pw_disconnect_time == 0) return;
+
+    if (std::time(0) - data->pw_disconnect_time >= 4) {
+        std::cout << "PW stream has been paused for >5 seconds, assuming we are dead / have nothing to capture." << std::endl;
+        exit_streaming(data);
+    }
+}
 
 
 
@@ -300,7 +320,6 @@ static void registry_event_global(void *data_raw,
 static const struct pw_registry_events registry_events = {
     PW_VERSION_REGISTRY_EVENTS,
     .global = registry_event_global,
-    // .global_remove = registry_global_remove,
 };
 
 static void core_done(void *data_raw, uint32_t id, int seq)
@@ -412,6 +431,7 @@ void prepare_recording(stateData *data, int targetPid) {
                             (enum pw_stream_flags) (PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS),
                             data->pw_connect_params.pw_target_connect_helper_params, 1);
             std::cout << "Connecting to any stream - stream id: " << re << std::endl;
+
         }
 
         #if send_instantly
@@ -420,13 +440,22 @@ void prepare_recording(stateData *data, int targetPid) {
         auto frame_timer = pw_loop_add_timer(pw_main_loop_get_loop(data->loop), send_frame_timer, (void*) data);
         PW_THROW_IF(!frame_timer, "Failed to create timer for frame sending");
         // Set the timer to trigger every interval_ms milliseconds
-        struct timespec interval = { .tv_sec = 0, .tv_nsec = 1000000 * (1000 / data->fps) };  // 60 FPS in ns
-        struct timespec value = { .tv_sec = 0, .tv_nsec = 1000000 * (1000 / data->fps) };  // 60 FPS in ns
+        struct timespec send_frame_timer_interval = { .tv_sec = 0, .tv_nsec = 1000000 * interval_ms };  // 60 FPS in ns
+        struct timespec send_frame_timer_value = { .tv_sec = 0, .tv_nsec = 1000000 * interval_ms };  // 60 FPS in ns
 
         // Set the initial value and interval for the timer
-        pw_loop_update_timer(pw_main_loop_get_loop(data->loop), frame_timer, &value, &interval, true);
+        pw_loop_update_timer(pw_main_loop_get_loop(data->loop), frame_timer, &send_frame_timer_value, &send_frame_timer_interval, true);
 
         #endif
+
+
+        auto disconnect_timer = pw_loop_add_timer(pw_main_loop_get_loop(data->loop), check_recording_disconnect, (void*) data);
+        PW_THROW_IF(!disconnect_timer, "Failed to create timer for disconnect checks");
+        struct timespec check_recording_disconnect_interval = { .tv_sec = 1, .tv_nsec = 0 };  // 60 FPS in ns
+        struct timespec check_recording_disconnect_value = { .tv_sec = 1, .tv_nsec = 0 };  // 60 FPS in ns
+        pw_loop_update_timer(pw_main_loop_get_loop(data->loop), disconnect_timer, &check_recording_disconnect_value, &check_recording_disconnect_interval, true);
+
+        data->pw_disconnect_time = std::time(0);
 }
 void start_recording(stateData *data) {
 

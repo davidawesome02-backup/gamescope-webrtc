@@ -60,71 +60,62 @@ typedef struct {
 } pw_connect_params_joined_obj;
 
 typedef struct {
-        uint32_t fps = 60;
+    // General
+    uint32_t fps = 60;
 
-        struct pw_main_loop *loop;
-        struct pw_stream *stream;
-
-        struct spa_video_info format;
-
-
-        std::shared_ptr<rtc::PeerConnection> pc_connection;
-        std::shared_ptr<rtc::Track> track;
-        std::shared_ptr<rtc::DataChannel> datatrack;
-        bool ws_should_close;
+    // Uinput virtualization
+    int uinput_kbm_fd;
+    std::string uinput_kbm_dev_path;
+    int uinput_ctrl_fd;
+    std::string uinput_ctrl_dev_path;
 
 
+    // Opening websocket and webrtc connection
+    std::shared_ptr<rtc::PeerConnection> pc_connection;
+    std::shared_ptr<rtc::Track> track;
+    std::shared_ptr<rtc::DataChannel> datatrack;
+    bool ws_should_close;
 
-        AVFrame *latest_frame = nullptr;
-        AVFrame *enc_frame = nullptr;
-        AVPacket *encPkt = nullptr;
-        int64_t frame_pts = 0;
-        int real_width = 0; // used for stride jumps, as a quick patch for requirements of 2x2
-        int width = 0, height = 0;
-        int streamWidth = 0, streamHeight = 0;
-        // int streamWidth = 640, streamHeight = 480;
-        SwsContext *sws = nullptr; // For format conversion
-
-        AVFormatContext *rtpFmt;
-        AVCodecContext *encCtx;
-
-        int uinput_kbm_fd;
-        std::string uinput_kbm_dev_path;
-        int uinput_ctrl_fd;
-        std::string uinput_ctrl_dev_path;
-
-        std::shared_ptr<rtc::WebSocket> connection_open_socket;
-        std::shared_ptr<std::string> connection_code;
-        std::shared_ptr<std::string> ICE_offer_str;
+    std::shared_ptr<rtc::WebSocket> connection_open_socket; // Websocket to backend to get a temp join code
+    std::shared_ptr<std::string> connection_code; // Short ~6 character code established with the websocket.
+    std::shared_ptr<std::string> ICE_offer_str; // Full offer code
 
 
-         // Vulkan-specific members
-        // VkInstance vkInstance = VK_NULL_HANDLE;
-        // VkDevice vkDevice = VK_NULL_HANDLE;
-        // VkQueue vkQueue = VK_NULL_HANDLE;
-        // VkCommandPool vkCommandPool = VK_NULL_HANDLE;
-        // VkCommandBuffer vkCommandBuffer = VK_NULL_HANDLE;
+    // AV encoding frames and data
+    AVFrame *latest_frame = nullptr;
+    AVFrame *hw_frame = nullptr;
 
-        AVBufferRef *device_ctx;
-        AVBufferRef *hw_device_ctx;
-        AVBufferRef *hw_frames_ctx;
+    AVPacket *encPkt = nullptr;
+    int64_t frame_pts = 0;
+    int real_width = 0; // used for image copying from pipewire (has extra blank at most 3 pixels)
+    int width = 0, height = 0; // Av frame sizes. (cut off at most 3 pixels)
+    
+    AVFormatContext *rtpFmt;
+    AVCodecContext *encCtx;
 
-        AVFrame *hw_frame;
+    AVBufferRef *device_ctx;
+    AVBufferRef *hw_device_ctx;
+    AVBufferRef *hw_frames_ctx;
 
-        bool pipeline_ready;
-        bool force_keyframe;
-        bool last_force_keyframe;
-        
-        int64_t last_dts = -1;
+    bool pipeline_ready; // Used to say if we should send frames after setup.
+    bool force_keyframe;
+    bool last_force_keyframe; // Needed to turn back off the resend headers flag
+    
 
-        spa_hook registry_listener;
-        spa_hook core_listener;
-        int pw_target_search_pid;
-        int pw_target_client_id;
-        int pw_target_id;
+    // Pipewire context information
+    struct pw_main_loop *loop;
+    struct pw_stream *stream;
+    struct spa_video_info pw_req_format;
 
-        pw_connect_params_joined_obj pw_connect_params;
+    pw_connect_params_joined_obj pw_connect_params;
+    spa_hook registry_listener;
+    spa_hook core_listener;
+    int pw_target_search_pid;
+    int pw_target_client_id;
+    int pw_target_id;
 
+
+    std::time_t pw_disconnect_time; // If 0, we are active, otherwise is a timestamp of when it stated a disconnect. If has been 5 sec disconnects.
 } stateData;
 
 
@@ -139,6 +130,7 @@ static T read_le_from_vec(const std::vector<std::byte>& buf, std::size_t offset)
     return value;
 }
 
+void exit_streaming(stateData* data);
 
 #include <uinput_helper.hpp>
 #include <webrtc.hpp>

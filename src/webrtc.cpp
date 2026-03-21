@@ -98,9 +98,9 @@ void setup_RTC(stateData *data, bool create_code, std::string url_base) {
     auto pc = std::make_shared<rtc::PeerConnection>(config);
     data->pc_connection = pc;
     
-    pc->onStateChange([](rtc::PeerConnection::State state) {
+    pc->onStateChange([data](rtc::PeerConnection::State state) {
         std::cout << "State: " << state << std::endl; // Todo if closing, reoffer connection stuff
-        if (state == rtc::PeerConnection::State::Closed || state == rtc::PeerConnection::State::Failed || state == rtc::PeerConnection::State::Disconnected) {exit(0);}
+        if (state == rtc::PeerConnection::State::Closed || state == rtc::PeerConnection::State::Failed || state == rtc::PeerConnection::State::Disconnected) {exit_streaming(data);}
     });
     pc->onGatheringStateChange([data, pc, url_base, create_code](rtc::PeerConnection::GatheringState state) {
         if (state == rtc::PeerConnection::GatheringState::Complete) {
@@ -149,10 +149,11 @@ void setup_RTC(stateData *data, bool create_code, std::string url_base) {
                 });
                 data->connection_open_socket.get()->onClosed([pc, data](void){
                     std::cout << "Closed ws!" << std::endl;
-                    if (!data->ws_should_close) exit(0);
+                    if (!data->ws_should_close) exit_streaming(data);
                 });
-                data->connection_open_socket.get()->onError([pc](std::string error){
+                data->connection_open_socket.get()->onError([pc, data](std::string error){
                     std::cout << "Error ws!: "+error << std::endl;
+                    exit_streaming(data);
                 });
 
                 data->connection_open_socket.get()->open(url);
