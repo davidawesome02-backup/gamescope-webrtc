@@ -41,7 +41,7 @@ extern "C" {
 const uint32_t SSRC = 42;
 const int RTP_MTU = 1200;
 
-
+#define send_instantly false
 
 
 typedef struct {

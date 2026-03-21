@@ -184,9 +184,9 @@ function b32dec(input) {
         value = (value << 5) | map[input[i]];
         bits += 5;
         if (bits >= 8) {
-        bits -= 8;
-        output += String.fromCharCode((value >> bits) & 0xFF);
-        value = value & ((1 << bits) - 1);
+            bits -= 8;
+            output += String.fromCharCode((value >> bits) & 0xFF);
+            value = value & ((1 << bits) - 1);
         }
     }
 
@@ -209,6 +209,7 @@ document.querySelector('button').addEventListener('click',  async () => {
     websock.onmessage = async (e) => {
         websock_msg = JSON.parse(e.data)
         if (websock_msg.type != "offer") return;
+        console.log("WS response recived, generating local, and waiting for remote")
         
 
         const pc = new RTCPeerConnection({
@@ -255,9 +256,27 @@ document.querySelector('button').addEventListener('click',  async () => {
             evt.channel.addEventListener("open", ()=>{
                 console.log("Datachannel open, enabling input and playback!");
                 
-                document.getElementById("connect_popup").classList.toggle("hidden");
-                document.getElementById("video-element").classList.toggle("hidden");
+                document.getElementById("connect_popup").classList.toggle("hidden", true);
+                document.getElementById("video-element").classList.toggle("hidden", false);
             })
+            evt.channel.addEventListener("message", (e)=>{
+                console.log("Datachannel sent message: ", e);
+                try {
+                    parsed_message = JSON.parse(e.data);
+                    switch (parsed_message?.["type"]) {
+                        case "close":
+                            pc.close()
+                            break;
+                    
+                        default:
+                            break;
+                    }
+                } catch {}
+            });
+        }
+        pc.onclose = (evt) => {
+            document.getElementById("connect_popup").classList.toggle("hidden", false);
+            document.getElementById("video-element").classList.toggle("hidden", true);
         }
 
         let decoded_b64_offer = JSON.parse(b32dec(websock_msg.offer));
@@ -274,7 +293,5 @@ document.querySelector('button').addEventListener('click',  async () => {
         // For debugging purposes
         window.pc_ = pc
     }
-
-    
 })
 
