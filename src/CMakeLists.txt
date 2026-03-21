@@ -44,23 +44,25 @@ target_link_libraries(gamescope-webrtc-lib PRIVATE
 target_link_libraries(gamescope-webrtc-lib PRIVATE
     "datachannel"
 
+    # I have no idea, this causes an warning, but removing it breaks stuff. I CANNOT figure out how to compile without the warning, I have been here for 2 hours.
+    # You know what... lets do a one of those joke posts - Total time spent trying to remove this: 2 hours
+    # Total list of things tried:
+    # Using linking groups to define all symbols -  [h264_vulkan @ 0x5600597f27b0] [IMGUTILS @ 0x7ffcd1b08fb0] Picture size 480x0 is invalid
+    #                                               [h264_vulkan @ 0x5600597f27b0] Ignoring invalid width/height values
+    #                                               [h264_vulkan @ 0x5600597f27b0] [IMGUTILS @ 0x7ffcd1b08f90] Picture size 0x0 is invalid
+    #                                               [h264_vulkan @ 0x5600597f27b0] Invalid video pixel format: -1
+    #                                               terminate called after throwing an instance of 'std::runtime_error'
+    #                                               what():  avcodec_open2 failed
+    # Using diffrent WHOLE_ARCHIVE for each part -  Multiple deffitions of all the functions in vulkan somehow, works with one, but two fails unless certain ones used and certain order. Three just always fails.
+    # 
+
+    # "-Wl,-Map=linker.map"
+
+    "ffmpeg_avutil"
     "ffmpeg_avcodec"
     "ffmpeg_avformat"
-    "ffmpeg_avutil"
-    "ffmpeg_swscale"
-)
-
-target_link_libraries(gamescope-webrtc-lib PRIVATE
-    "$<LINK_LIBRARY:WHOLE_ARCHIVE,datachannel>"
     "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg>"
 )
-
-# target_link_libraries(gamescope-webrtc-lib PRIVATE
-#     "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg_avcodec>"
-#     "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg_avformat>"
-#     "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg_avutil>"
-#     "$<LINK_LIBRARY:WHOLE_ARCHIVE,ffmpeg_swscale>"
-# )
 
 
 target_link_options(gamescope-webrtc-lib PRIVATE
