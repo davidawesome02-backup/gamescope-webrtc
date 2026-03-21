@@ -35,6 +35,12 @@ ExternalProject_Add(ffmpeg_build
         --enable-small             # reduces size without breaking helpers
         --disable-everything
 
+        --disable-swresample
+        --disable-swscale
+        --disable-avdevice
+        --disable-avfilter
+        --disable-iconv
+
         # core libs
         --enable-avcodec
         --enable-avformat
@@ -43,13 +49,16 @@ ExternalProject_Add(ffmpeg_build
         # threading
         --enable-pthreads
 
-        # fast CPU optimizations (cant use asm because of PIC)
+        # fast CPU optimizations (if we were using cpu encoding)
         --enable-runtime-cpudetect
-        # unfortunately required to make ffmpeg compile into a single .a file :(
-        --disable-asm
+
+        # Makes the binary slightly larger, smallest is using --disable-asm, and dosnt affect preformance much due to vulkan backend use.
+        # Due to this, I have it disabled right now, so compiling dosnt require nasm
+        # --enable-asm      # 4805328 (at one point)
+        --disable-asm       # 4640768
+
 
         # H264 support
-
         --enable-hwaccel=h264_vulkan
         --enable-encoder=h264_vulkan
 
@@ -58,12 +67,6 @@ ExternalProject_Add(ffmpeg_build
 
         # containers
         --enable-muxer=rtp
-
-
-        # to remove
-        --enable-muxer=rtp_mpegts
-        --enable-swscale
-        --enable-parser=mpegvideo
 
     BUILD_COMMAND make -j
     INSTALL_COMMAND make install

@@ -57,7 +57,8 @@ target_link_libraries(gamescope-webrtc-lib PRIVATE
     # 
 
     # "-Wl,-Map=linker.map"
-
+    "-Wl,-Bsymbolic"
+    
     "ffmpeg_avutil"
     "ffmpeg_avcodec"
     "ffmpeg_avformat"
