@@ -31,6 +31,7 @@ jobs:
             openssl \
             x264 \
             ffnvcodec-headers \
+            nvidia-utils \
             nasm
 
       - name: Checkout repository (shallow + submodules)
