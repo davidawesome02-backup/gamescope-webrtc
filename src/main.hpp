@@ -24,7 +24,6 @@ extern "C" {
 #include <libavutil/avutil.h>
 #include <libavutil/frame.h>
 #include <libavutil/opt.h>
-#include <libswscale/swscale.h>
 
 #include <linux/uinput.h>
 #include <unistd.h>
