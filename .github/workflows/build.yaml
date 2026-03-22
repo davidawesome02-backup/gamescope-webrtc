@@ -36,6 +36,8 @@ jobs:
             libpipewire-0.3-dev \
             libspa-0.2-dev \
             libvulkan-dev \
+            libvulkan1 \
+            vulkan-tools
 
           # SSL (libdatachannel)
           sudo apt-get install -y \
