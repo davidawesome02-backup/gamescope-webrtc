@@ -39,9 +39,20 @@ jobs:
             libvulkan1 \
             vulkan-tools
 
+          sudo apt-get install -y \
+            libvulkan-dev \
+            vulkan-validationlayers-dev \
+            spirv-tools
+
           # SSL (libdatachannel)
           sudo apt-get install -y \
             libssl-dev
+
+      - name: Debug Vulkan pkg-config
+        run: |
+          pkg-config --modversion vulkan || true
+          pkg-config --cflags vulkan || true
+          pkg-config --libs vulkan || true
 
       - name: Configure CMake
         run: |
