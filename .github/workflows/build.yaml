@@ -63,4 +63,4 @@ jobs:
           name: gamescope-webrtc-build
           path: |
             build/src/gamescope-webrtc
-            build/src/gamescope-webrtc-lib.so
+            build/src/libgamescope-webrtc-lib.so
