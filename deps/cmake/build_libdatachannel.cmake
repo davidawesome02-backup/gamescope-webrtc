@@ -8,6 +8,14 @@ set(LIBDATACHANNEL_SRC ${CMAKE_SOURCE_DIR}/deps/libdatachannel)
 set(LIBDATACHANNEL_BUILD ${CMAKE_BINARY_DIR}/libdatachannel)
 set(LIBDATACHANNEL_INSTALL ${LIBDATACHANNEL_BUILD}/install)
 
+set(LIBDATACHANNEL_LIBS
+    ${LIBDATACHANNEL_INSTALL}/lib/libdatachannel.a
+    ${LIBDATACHANNEL_INSTALL}/lib/libjuice.a
+    ${LIBDATACHANNEL_INSTALL}/lib/libsrtp2.a
+    ${LIBDATACHANNEL_INSTALL}/lib/libusrsctp.a
+)
+
+
 # --- ExternalProject to build libdatachannel with all features ---
 ExternalProject_Add(libdatachannel_build
     SOURCE_DIR ${LIBDATACHANNEL_SRC}
@@ -28,6 +36,8 @@ ExternalProject_Add(libdatachannel_build
         -DUSE_SYSTEM_PLUG=OFF
         -DUSE_SYSTEM_JSON=OFF
         -DUSE_SYSTEM_JUICE=OFF
+
+    BUILD_BYPRODUCTS ${LIBDATACHANNEL_LIBS}
 )
 set_property(TARGET libdatachannel_build PROPERTY EXCLUDE_FROM_ALL TRUE)
 
@@ -36,14 +46,6 @@ add_library(datachannel INTERFACE)
 target_include_directories(datachannel INTERFACE
     ${LIBDATACHANNEL_INSTALL}/include
     ${LIBDATACHANNEL_SRC}/deps/json/include
-)
-
-
-set(LIBDATACHANNEL_LIBS
-    ${LIBDATACHANNEL_INSTALL}/lib/libdatachannel.a
-    ${LIBDATACHANNEL_INSTALL}/lib/libjuice.a
-    ${LIBDATACHANNEL_INSTALL}/lib/libsrtp2.a
-    ${LIBDATACHANNEL_INSTALL}/lib/libusrsctp.a
 )
 
 
