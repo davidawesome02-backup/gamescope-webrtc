@@ -25,7 +25,8 @@ jobs:
             ninja \
             git \
             pkgconf \
-            vulkan-devel \
+            libva \
+            libva-utils \
             pipewire \
             openssl \
             nasm
@@ -35,12 +36,6 @@ jobs:
         with:
           fetch-depth: 1
           submodules: recursive
-
-      - name: Verify Vulkan (important debug step)
-        run: |
-          pkg-config --modversion vulkan
-          pkg-config --cflags vulkan
-          ls /usr/include/vulkan
 
       - name: Configure CMake
         run: |

@@ -35,7 +35,6 @@ extern "C" {
 #include <vector>
 #include <filesystem>
 
-#include <vulkan/vulkan.h>
 
 const uint32_t SSRC = 42;
 const int RTP_MTU = 1200;
