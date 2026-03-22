@@ -19,8 +19,8 @@ ExternalProject_Add(libdatachannel_build
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
         -DUSE_OPENSSL=ON
         -DUSE_NICE=OFF        # use built-in ICE backend
-        -DBUILD_EXAMPLES=OFF
-        -DBUILD_TESTING=OFF
+        -DNO_EXAMPLES=ON
+        -DNO_TESTS=ON
         -DNO_MEDIA=OFF        # include media support
         -DNO_WEBSOCKET=OFF    # include websocket support
         -DUSE_SYSTEM_SRTP=OFF
@@ -35,23 +35,25 @@ set_property(TARGET libdatachannel_build PROPERTY EXCLUDE_FROM_ALL TRUE)
 add_library(datachannel INTERFACE)
 target_include_directories(datachannel INTERFACE
     ${LIBDATACHANNEL_INSTALL}/include
-)
-
-
-# --- JSON (header-only) ---
-add_library(datachannel_json INTERFACE)
-target_include_directories(datachannel_json INTERFACE
     ${LIBDATACHANNEL_SRC}/deps/json/include
 )
 
 
-file(GLOB LIBDATACHANNEL_STATIC_LIBS "${LIBDATACHANNEL_INSTALL}/lib/*.a")
+set(LIBDATACHANNEL_LIBS
+    ${LIBDATACHANNEL_INSTALL}/lib/libdatachannel.a
+    ${LIBDATACHANNEL_INSTALL}/lib/libjuice.a
+    ${LIBDATACHANNEL_INSTALL}/lib/libsrtp2.a
+    ${LIBDATACHANNEL_INSTALL}/lib/libusrsctp.a
+)
+
 
 # --- Link everything into INTERFACE target ---
 # This ensures all transitive dependencies are included
 target_link_libraries(datachannel INTERFACE
-    ${LIBDATACHANNEL_STATIC_LIBS}
-    datachannel_json
+    "-Wl,--whole-archive"
+    ${LIBDATACHANNEL_LIBS}
+    "-Wl,--no-whole-archive"
+
     ssl
     crypto
     pthread

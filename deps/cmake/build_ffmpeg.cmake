@@ -7,8 +7,8 @@ set(FFMPEG_INSTALL ${FFMPEG_BUILD}/install)
 set(FFMPEG_LIB_DIR ${FFMPEG_INSTALL}/lib)
 
 set(FFMPEG_LIBS
-    ${FFMPEG_LIB_DIR}/libavcodec.a
     ${FFMPEG_LIB_DIR}/libavformat.a
+    ${FFMPEG_LIB_DIR}/libavcodec.a
     ${FFMPEG_LIB_DIR}/libavutil.a
 )
 
@@ -78,27 +78,6 @@ ExternalProject_Add(ffmpeg_build
     PATCH_COMMAND ""
 )
 
-# imported static libs
-
-add_library(ffmpeg_avcodec STATIC IMPORTED GLOBAL)
-add_library(ffmpeg_avformat STATIC IMPORTED GLOBAL)
-add_library(ffmpeg_avutil STATIC IMPORTED GLOBAL)
-
-set_target_properties(ffmpeg_avcodec PROPERTIES
-    IMPORTED_LOCATION ${FFMPEG_INSTALL}/lib/libavcodec.a)
-
-set_target_properties(ffmpeg_avformat PROPERTIES
-    IMPORTED_LOCATION ${FFMPEG_INSTALL}/lib/libavformat.a)
-
-set_target_properties(ffmpeg_avutil PROPERTIES
-    IMPORTED_LOCATION ${FFMPEG_INSTALL}/lib/libavutil.a)
-
-add_dependencies(ffmpeg_avcodec ffmpeg_build)
-add_dependencies(ffmpeg_avformat ffmpeg_build)
-add_dependencies(ffmpeg_avutil ffmpeg_build)
-
-# interface target for easy linking
-
 add_library(ffmpeg INTERFACE)
 
 target_include_directories(ffmpeg INTERFACE
@@ -106,10 +85,11 @@ target_include_directories(ffmpeg INTERFACE
 )
 
 target_link_libraries(ffmpeg INTERFACE
-    ffmpeg_avcodec
-    ffmpeg_avformat
-    ffmpeg_avutil
+    "-Wl,-Bsymbolic"
+    "-Wl,--whole-archive"
+    ${FFMPEG_LIBS}
     pthread
     m
     z
+    "-Wl,--no-whole-archive"
 )
