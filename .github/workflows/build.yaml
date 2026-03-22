@@ -32,6 +32,7 @@ jobs:
             x264 \
             ffnvcodec-headers \
             nvidia-utils \
+            cuda \
             nasm
 
       - name: Checkout repository (shallow + submodules)
