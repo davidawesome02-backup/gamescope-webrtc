@@ -29,11 +29,13 @@ jobs:
             libva-utils \
             pipewire \
             openssl \
-            x264 \
-            ffnvcodec-headers \
-            nvidia-utils \
-            cuda \
             nasm
+
+            # These allow software and nvidia gpus without a extra driver, but require extra work.
+            # x264
+            # ffnvcodec-headers
+            # nvidia-utils
+            # cuda
 
       - name: Checkout repository (shallow + submodules)
         uses: actions/checkout@v4

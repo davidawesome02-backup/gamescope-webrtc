@@ -61,14 +61,14 @@ ExternalProject_Add(ffmpeg_build
         # H264 support
         --enable-hwaccel=h264_vaapi
         --enable-encoder=h264_vaapi
-        --enable-hwaccel=h264_nvenc
-        --enable-encoder=h264_nvenc
-        --enable-encoder=libx264
+        # --enable-hwaccel=h264_nvenc
+        # --enable-encoder=h264_nvenc
+        # --enable-encoder=libx264
 
         --enable-vaapi
-        --enable-nvenc
-        --enable-libx264
-        --enable-ffnvcodec
+        # --enable-libx264
+        # --enable-nvenc
+        # --enable-ffnvcodec
 
         # containers
         --enable-muxer=rtp
@@ -99,8 +99,8 @@ target_link_libraries(ffmpeg INTERFACE
 
 
     va
-    va-drm
-    drm
-    x264
+    # va-drm
+    # drm
+    # x264
     "-Wl,--no-whole-archive"
 )

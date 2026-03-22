@@ -218,7 +218,10 @@ static void on_process(void *userdata) {
 
         data->latest_frame = nullptr;
         
-        setup_libav_buffers(data); // rebuild only encoder + frames
+        if (!setup_libav_buffers(data)) {
+            std::cout << "FAILED TO FIND A BACKEND / START ENCODING. EXITING!" << std::endl;
+            exit_streaming(data);
+        } // rebuild only encoder + frames
         pw_stream_queue_buffer(data->stream, b);
         return;
     }
