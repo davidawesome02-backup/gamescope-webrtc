@@ -41,7 +41,7 @@ jobs:
 
           sudo apt-get install -y \
             libvulkan-dev \
-            vulkan-validationlayers-dev \
+            vulkan-utility-libraries-dev \
             spirv-tools
 
           # SSL (libdatachannel)
