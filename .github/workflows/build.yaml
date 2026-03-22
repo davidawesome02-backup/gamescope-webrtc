@@ -32,6 +32,10 @@ jobs:
             nasm
 
             # These allow software and nvidia gpus without a extra driver, but require extra work.
+            # if enabling these, may want to staticly compile x264 as its required .so file for ffmpeg
+            # cuda is optional at runtime, like libav, so that would be a strict complied in fallback
+            # but I dont really want to take on the 3 backends durring compile time, as that also requires
+            # that we most likely compile `ffnvcodec-headers` from source here too (not really compiled)
             # x264
             # ffnvcodec-headers
             # nvidia-utils

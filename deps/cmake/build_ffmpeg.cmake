@@ -99,8 +99,8 @@ target_link_libraries(ffmpeg INTERFACE
 
 
     va
-    # va-drm
-    # drm
+    va-drm
+    drm
     # x264
     "-Wl,--no-whole-archive"
 )
