@@ -58,12 +58,6 @@ typedef struct {
 } pw_connect_params_joined_obj;
 
 
-enum class EncodeMode {
-    VAAPI,
-    NVENC,
-    X264
-};
-
 typedef struct {
     // General
     uint32_t fps = 60;
@@ -102,7 +96,7 @@ typedef struct {
     AVBufferRef *hw_device_ctx;
     AVBufferRef *hw_frames_ctx;
 
-    bool pipeline_ready; // Used to say if we should send frames after setup.
+    std::atomic<bool> pipeline_ready; // Used to say if we should send frames after setup.
     bool force_keyframe;
     bool last_force_keyframe; // Needed to turn back off the resend headers flag
     
@@ -121,8 +115,6 @@ typedef struct {
 
 
     std::time_t pw_disconnect_time; // If 0, we are active, otherwise is a timestamp of when it stated a disconnect. If has been 5 sec disconnects.
-
-    EncodeMode encode_mode;
 } stateData;
 
 

@@ -25,7 +25,7 @@ ExternalProject_Add(ffmpeg_build
         --enable-static
         --enable-pic
         --enable-lto
-        --enable-gpl
+        # --enable-gpl # required for some options like nvidia
 
         # reduce size
         --disable-programs
