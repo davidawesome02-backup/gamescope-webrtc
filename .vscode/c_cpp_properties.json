@@ -4,7 +4,6 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
-                "~/local/libdatachannel-install/include",
                 "/usr/include/pipewire-0.3",
                 "/usr/include/spa-0.2"
             ],
@@ -12,10 +11,7 @@
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c17",
             "cppStandard": "gnu++17",
-            "intelliSenseMode": "linux-gcc-x64",
-            "compileCommands": [
-                "${workspaceFolder}/deps/libdatachannel/build/compile_commands.json"
-            ]
+            "intelliSenseMode": "linux-gcc-x64"
         }
     ],
     "version": 4

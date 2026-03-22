@@ -1,0 +1,65 @@
+name: Build gamescope-webrtc
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    env:
+      BUILD_DIR: build
+
+    steps:
+      - name: Checkout repository (shallow + submodules)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+
+          # Core build tools
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            nasm \
+            ninja-build \
+            pkg-config \
+            git
+
+          # PipeWire + graphics deps
+          sudo apt-get install -y \
+            libpipewire-0.3-dev \
+            libspa-0.2-dev \
+            libvulkan-dev \
+
+          # SSL (libdatachannel)
+          sudo apt-get install -y \
+            libssl-dev
+
+      - name: Configure CMake
+        run: |
+          cmake -B $BUILD_DIR \
+                -S . \
+                -G Ninja \
+                -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: |
+          cmake --build $BUILD_DIR --config Release --parallel
+
+      - name: Verify outputs
+        run: |
+          ls -lah $BUILD_DIR/src
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gamescope-webrtc-build
+          path: |
+            build/src/gamescope-webrtc
+            build/src/gamescope-webrtc-lib.so
