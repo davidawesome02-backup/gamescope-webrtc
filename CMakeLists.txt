@@ -16,6 +16,8 @@ add_link_options(
     -Wl,--gc-sections
 )
 
+set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS} -s")
+
 # LTO
 include(CheckIPOSupported)
 check_ipo_supported(RESULT ipo_supported)
