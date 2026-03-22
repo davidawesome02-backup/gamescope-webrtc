@@ -32,7 +32,6 @@ jobs:
             x264 \
             ffnvcodec-headers \
             nvidia-utils \
-            nvidia \
             cuda \
             nasm
 
