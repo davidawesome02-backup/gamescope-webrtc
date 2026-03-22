@@ -57,6 +57,13 @@ typedef struct {
     const struct spa_pod *pw_target_connect_helper_params[1];
 } pw_connect_params_joined_obj;
 
+
+enum class EncodeMode {
+    VAAPI,
+    NVENC,
+    X264
+};
+
 typedef struct {
     // General
     uint32_t fps = 60;
@@ -114,6 +121,8 @@ typedef struct {
 
 
     std::time_t pw_disconnect_time; // If 0, we are active, otherwise is a timestamp of when it stated a disconnect. If has been 5 sec disconnects.
+
+    EncodeMode encode_mode;
 } stateData;
 
 

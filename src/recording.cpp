@@ -6,129 +6,139 @@
 
 #define PW_THROW_IF(cond, msg) if (cond) throw std::runtime_error(msg);
 
-static bool setup_libav_buffers(stateData *data) {
+
+
+static bool try_setup_encoder(stateData *data, EncodeMode try_encode_mode) {
     int ret = 0;
 
-    ret = av_hwdevice_ctx_create(
-        &data->hw_device_ctx,
-        AV_HWDEVICE_TYPE_VAAPI,
-        "/dev/dri/renderD128",
-        NULL,
-        0
-    );
-    PW_THROW_IF(ret < 0, "Failed to create Vaapi hwdevice context");
+    const char *encoder_name = nullptr;
+    bool needs_hw = false;
+    enum AVHWDeviceType hw_type;
 
-    data->hw_frames_ctx = av_hwframe_ctx_alloc(data->hw_device_ctx);
-    PW_THROW_IF(!data->hw_frames_ctx, "Could not alloc Vaapi hwframe context");
+    switch (try_encode_mode) {
+        case EncodeMode::VAAPI:
+            encoder_name = "h264_vaapi";
+            hw_type = AV_HWDEVICE_TYPE_VAAPI;
+            needs_hw = true;
+            break;
+        case EncodeMode::NVENC:
+            encoder_name = "h264_nvenc";
+            hw_type = AV_HWDEVICE_TYPE_CUDA;
+            needs_hw = true;
+            break;
+        case EncodeMode::X264:
+            encoder_name = "libx264";
+            needs_hw = false;
+            break;
+    }
 
-    AVHWFramesContext *frames_ctx = (AVHWFramesContext *)data->hw_frames_ctx->data;
-    frames_ctx->format = AV_PIX_FMT_VAAPI;
-    frames_ctx->sw_format = AV_PIX_FMT_NV12;
-    frames_ctx->width = data->width;
-    frames_ctx->height = data->height;
-    frames_ctx->initial_pool_size = 4;
+    // --- HW DEVICE (if needed)
+    if (needs_hw) {
+        ret = av_hwdevice_ctx_create(&data->hw_device_ctx, hw_type, nullptr, nullptr, 0);
+        if (ret < 0) return false;
 
-    ret = av_hwframe_ctx_init(data->hw_frames_ctx);
-    PW_THROW_IF(ret < 0, "Failed to init Vaapi hwframe ctx");
+        data->hw_frames_ctx = av_hwframe_ctx_alloc(data->hw_device_ctx);
+        if (!data->hw_frames_ctx) return false;
 
-    const AVCodec *encoder = avcodec_find_encoder_by_name("h264_vaapi");
-    PW_THROW_IF(!encoder, "Failed to get h264_vaapi encoder");
+        auto *f = (AVHWFramesContext*)data->hw_frames_ctx->data;
+        f->format    = (try_encode_mode == EncodeMode::VAAPI) ? AV_PIX_FMT_VAAPI : AV_PIX_FMT_CUDA;
+        f->sw_format = AV_PIX_FMT_NV12;
+        f->width     = data->width;
+        f->height    = data->height;
+        f->initial_pool_size = 4;
 
-    data->encCtx = avcodec_alloc_context3(encoder);
-    data->encCtx->width = data->width;
+        if (av_hwframe_ctx_init(data->hw_frames_ctx) < 0)
+            return false;
+    }
+
+    // --- ENCODER
+    const AVCodec *codec = avcodec_find_encoder_by_name(encoder_name);
+    if (!codec) return false;
+
+    data->encCtx = avcodec_alloc_context3(codec);
+    data->encCtx->width  = data->width;
     data->encCtx->height = data->height;
-    data->encCtx->pix_fmt = AV_PIX_FMT_VAAPI;
-    data->encCtx->time_base = AVRational{1, (int)data->fps};
-    data->encCtx->framerate = AVRational{(int)data->fps, 1};
+    data->encCtx->time_base = {1, (int)data->fps};
+    data->encCtx->framerate = {(int)data->fps, 1};
     data->encCtx->gop_size = data->fps;
     data->encCtx->max_b_frames = 0;
-    av_opt_set(data->encCtx->priv_data, "repeat_headers", "0", 0);
+    data->encCtx->pix_fmt = needs_hw
+        ? ((try_encode_mode == EncodeMode::VAAPI) ? AV_PIX_FMT_VAAPI : AV_PIX_FMT_CUDA)
+        : AV_PIX_FMT_NV12;
+
     data->encCtx->flags |= AV_CODEC_FLAG_LOW_DELAY;
 
-    data->encCtx->hw_device_ctx = av_buffer_ref(data->hw_device_ctx);
-    data->encCtx->hw_frames_ctx = av_buffer_ref(data->hw_frames_ctx);
-
-    AVDictionary *codec_opts = NULL;
-    av_dict_set(&codec_opts, "preset", "ultrafast", 0);
-    // av_dict_set(&codec_opts, "qp", "0", 0);
-    av_dict_set(&codec_opts, "qp", "18", 0); // 18 means medium encoding quality, it should be fine - 0 is a LOT of data usage but also quicker by ~1%.
-
-    ret = avcodec_open2(data->encCtx, encoder, &codec_opts);
-    av_dict_free(&codec_opts);
-    PW_THROW_IF(ret < 0, "avcodec_open2 failed");
-
-    if (!data->track) {
-        rtc::Description::Video media("video", rtc::Description::Direction::SendOnly);
-        media.addH264Codec(96);
-        media.addSSRC(SSRC, "video-send");
-        data->track = data->pc_connection->addTrack(media);
-        data->pc_connection->setLocalDescription();
+    if (needs_hw) {
+        data->encCtx->hw_device_ctx = av_buffer_ref(data->hw_device_ctx);
+        data->encCtx->hw_frames_ctx = av_buffer_ref(data->hw_frames_ctx);
     }
 
-    if (!data->rtpFmt) {
-        ret = avformat_alloc_output_context2(&data->rtpFmt, nullptr, "rtp", nullptr);
-        PW_THROW_IF(ret < 0 || !data->rtpFmt, "rtp ctx failed");
+    AVDictionary *opts = nullptr;
+    av_dict_set(&opts, "preset", "ultrafast", 0);
+    av_dict_set(&opts, "qp", "18", 0);
 
-        AVStream *rtpStream = avformat_new_stream(data->rtpFmt, nullptr);
-        PW_THROW_IF(!rtpStream, "stream failed");
+    ret = avcodec_open2(data->encCtx, codec, &opts);
+    av_dict_free(&opts);
+    if (ret < 0) return false;
 
-        avcodec_parameters_from_context(rtpStream->codecpar, data->encCtx);
-        rtpStream->time_base = data->encCtx->time_base;
+    data->encode_mode = try_encode_mode;
+    return true;
+}
 
-        int avio_buf_size = RTP_MTU + 256;
-        uint8_t *avioBuffer = (uint8_t *)av_malloc(avio_buf_size);
+static bool setup_libav_buffers(stateData *data) {
+    data->encode_mode = EncodeMode::VAAPI;
 
-        AVIOContext *avio = avio_alloc_context(
-            avioBuffer,
-            avio_buf_size,
-            1,
-            data->track.get(),
-            nullptr,
-            rtp_avio_write,
-            nullptr
-        );
+    if (!try_setup_encoder(data, EncodeMode::VAAPI)) {
+        std::cerr << "VAAPI failed, trying NVENC\n";
 
-        data->rtpFmt->pb = avio;
-        data->rtpFmt->packet_size = RTP_MTU;
-        data->rtpFmt->flags |= AVFMT_FLAG_CUSTOM_IO;
+        if (!try_setup_encoder(data, EncodeMode::NVENC)) {
+            std::cerr << "NVENC failed, falling back to libx264\n";
 
-        AVDictionary *opts = nullptr;
-        av_dict_set(&opts, "payload_type", "96", 0);
-        av_dict_set(&opts, "ssrc", std::to_string(SSRC).c_str(), 0);
-
-        ret = avformat_write_header(data->rtpFmt, &opts);
-        av_dict_free(&opts);
-        PW_THROW_IF(ret < 0, "write header failed");
+            if (!try_setup_encoder(data, EncodeMode::X264)) {
+                std::cerr << "All encoders failed\n";
+                return false;
+            }
+        }
     }
 
+    // --- Frames
     data->latest_frame = av_frame_alloc();
     data->latest_frame->format = AV_PIX_FMT_NV12;
-    data->latest_frame->width = data->width;
+    data->latest_frame->width  = data->width;
     data->latest_frame->height = data->height;
-    ret = av_frame_get_buffer(data->latest_frame, 32);
-    PW_THROW_IF(ret < 0, "latest_frame alloc failed");
+    PW_THROW_IF(av_frame_get_buffer(data->latest_frame, 32) < 0, "latest_frame alloc failed");
 
-    data->hw_frame = av_frame_alloc();
-    data->hw_frame->format = AV_PIX_FMT_VAAPI;
-    data->hw_frame->hw_frames_ctx = av_buffer_ref(data->hw_frames_ctx);
-    ret = av_hwframe_get_buffer(data->hw_frames_ctx, data->hw_frame, 0);
-    PW_THROW_IF(ret < 0, "hw frame alloc failed");
+    if (data->encode_mode != EncodeMode::X264) {
+        data->hw_frame = av_frame_alloc();
+        data->hw_frame->format = data->encCtx->pix_fmt;
+        data->hw_frame->hw_frames_ctx = av_buffer_ref(data->hw_frames_ctx);
+
+        if (av_hwframe_get_buffer(data->hw_frames_ctx, data->hw_frame, 0) < 0)
+            return false;
+    }
 
     data->encPkt = av_packet_alloc();
     data->pipeline_ready = true;
     data->force_keyframe = true;
 
-    std::cout << "ALL BUFFERS ALLOCATED" << std::endl;
+    std::cout << "Encoder ready (encode_mode=" << (int)data->encode_mode << ")\n";
     return true;
 }
 
 static void send_latest_data(stateData *data) {
     if (!data->pipeline_ready) return;
 
-    data->hw_frame->pts = data->latest_frame->pts = data->frame_pts++;
+    data->latest_frame->pts = data->frame_pts++;
 
-    int ret = av_hwframe_transfer_data(data->hw_frame, data->latest_frame, 0);
-    PW_THROW_IF(ret < 0, "hw transfer failed");
+    AVFrame *frame = data->latest_frame;
+    if (data->encode_mode != EncodeMode::X264) {
+        data->hw_frame->pts = frame->pts;
+
+        if (av_hwframe_transfer_data(data->hw_frame, frame, 0) < 0)
+            return;
+
+        frame = data->hw_frame;
+    }
 
     if (data->last_force_keyframe != data->force_keyframe) {
         if (data->force_keyframe) {
@@ -146,7 +156,7 @@ static void send_latest_data(stateData *data) {
         data->hw_frame->pict_type = AV_PICTURE_TYPE_NONE;
     }
 
-    avcodec_send_frame(data->encCtx, data->hw_frame);
+    avcodec_send_frame(data->encCtx, frame);
 
     while (avcodec_receive_packet(data->encCtx, data->encPkt) == 0) {
         try {
@@ -191,7 +201,6 @@ static void on_process(void *userdata) {
 
     if (!data->latest_frame || data->latest_frame->width != data->width || data->latest_frame->height != data->height) {
         std::cout << "FREEING ENCODER/FRAMES FOR RESIZE" << std::endl;
-
 
         data->pipeline_ready = false;
 

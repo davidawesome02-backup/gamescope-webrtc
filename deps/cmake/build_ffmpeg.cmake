@@ -25,6 +25,7 @@ ExternalProject_Add(ffmpeg_build
         --enable-static
         --enable-pic
         --enable-lto
+        --enable-gpl
 
         # reduce size
         --disable-programs
@@ -60,8 +61,13 @@ ExternalProject_Add(ffmpeg_build
         # H264 support
         --enable-hwaccel=h264_vaapi
         --enable-encoder=h264_vaapi
+        --enable-hwaccel=h264_nvenc
+        --enable-encoder=h264_nvenc
+        --enable-encoder=libx264
 
         --enable-vaapi
+        --enable-nvenc
+        --enable-libx264
 
         # containers
         --enable-muxer=rtp

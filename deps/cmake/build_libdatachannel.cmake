@@ -25,7 +25,6 @@ ExternalProject_Add(libdatachannel_build
         -DCMAKE_BUILD_TYPE=Release
         -DBUILD_SHARED_LIBS=OFF
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-        -DUSE_OPENSSL=ON
         -DUSE_NICE=OFF        # use built-in ICE backend
         -DNO_EXAMPLES=ON
         -DNO_TESTS=ON
@@ -33,7 +32,6 @@ ExternalProject_Add(libdatachannel_build
         -DNO_WEBSOCKET=OFF    # include websocket support
         -DUSE_SYSTEM_SRTP=OFF
         -DUSE_SYSTEM_USRSCTP=OFF
-        -DUSE_SYSTEM_PLUG=OFF
         -DUSE_SYSTEM_JSON=OFF
         -DUSE_SYSTEM_JUICE=OFF
 

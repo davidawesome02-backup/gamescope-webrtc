@@ -29,6 +29,8 @@ jobs:
             libva-utils \
             pipewire \
             openssl \
+            x264 \
+            ffnvcodec-headers \
             nasm
 
       - name: Checkout repository (shallow + submodules)
