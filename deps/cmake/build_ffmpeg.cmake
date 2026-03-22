@@ -68,6 +68,7 @@ ExternalProject_Add(ffmpeg_build
         --enable-vaapi
         --enable-nvenc
         --enable-libx264
+        --enable-ffnvcodec
 
         # containers
         --enable-muxer=rtp
