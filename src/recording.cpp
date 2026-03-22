@@ -9,29 +9,35 @@
 static bool setup_libav_buffers(stateData *data) {
     int ret = 0;
 
-    ret = av_hwdevice_ctx_create(&data->hw_device_ctx, AV_HWDEVICE_TYPE_VULKAN, NULL, NULL, 0);
-    PW_THROW_IF(ret < 0, "Failed to create Vulkan hwdevice context");
+    ret = av_hwdevice_ctx_create(
+        &data->hw_device_ctx,
+        AV_HWDEVICE_TYPE_VAAPI,
+        "/dev/dri/renderD128",
+        NULL,
+        0
+    );
+    PW_THROW_IF(ret < 0, "Failed to create Vaapi hwdevice context");
 
     data->hw_frames_ctx = av_hwframe_ctx_alloc(data->hw_device_ctx);
-    PW_THROW_IF(!data->hw_frames_ctx, "Could not alloc Vulkan hwframe context");
+    PW_THROW_IF(!data->hw_frames_ctx, "Could not alloc Vaapi hwframe context");
 
     AVHWFramesContext *frames_ctx = (AVHWFramesContext *)data->hw_frames_ctx->data;
-    frames_ctx->format = AV_PIX_FMT_VULKAN;
+    frames_ctx->format = AV_PIX_FMT_VAAPI;
     frames_ctx->sw_format = AV_PIX_FMT_NV12;
     frames_ctx->width = data->width;
     frames_ctx->height = data->height;
     frames_ctx->initial_pool_size = 4;
 
     ret = av_hwframe_ctx_init(data->hw_frames_ctx);
-    PW_THROW_IF(ret < 0, "Failed to init Vulkan hwframe ctx");
+    PW_THROW_IF(ret < 0, "Failed to init Vaapi hwframe ctx");
 
-    const AVCodec *encoder = avcodec_find_encoder_by_name("h264_vulkan");
-    PW_THROW_IF(!encoder, "Failed to get h264_vulkan encoder");
+    const AVCodec *encoder = avcodec_find_encoder_by_name("h264_vaapi");
+    PW_THROW_IF(!encoder, "Failed to get h264_vaapi encoder");
 
     data->encCtx = avcodec_alloc_context3(encoder);
     data->encCtx->width = data->width;
     data->encCtx->height = data->height;
-    data->encCtx->pix_fmt = AV_PIX_FMT_VULKAN;
+    data->encCtx->pix_fmt = AV_PIX_FMT_VAAPI;
     data->encCtx->time_base = AVRational{1, (int)data->fps};
     data->encCtx->framerate = AVRational{(int)data->fps, 1};
     data->encCtx->gop_size = data->fps;
@@ -45,7 +51,7 @@ static bool setup_libav_buffers(stateData *data) {
     AVDictionary *codec_opts = NULL;
     av_dict_set(&codec_opts, "preset", "ultrafast", 0);
     // av_dict_set(&codec_opts, "qp", "0", 0);
-    av_dict_set(&codec_opts, "qp", "18", 0);
+    av_dict_set(&codec_opts, "qp", "18", 0); // 18 means medium encoding quality, it should be fine - 0 is a LOT of data usage but also quicker by ~1%.
 
     ret = avcodec_open2(data->encCtx, encoder, &codec_opts);
     av_dict_free(&codec_opts);
@@ -103,7 +109,7 @@ static bool setup_libav_buffers(stateData *data) {
     PW_THROW_IF(ret < 0, "latest_frame alloc failed");
 
     data->hw_frame = av_frame_alloc();
-    data->hw_frame->format = AV_PIX_FMT_VULKAN;
+    data->hw_frame->format = AV_PIX_FMT_VAAPI;
     data->hw_frame->hw_frames_ctx = av_buffer_ref(data->hw_frames_ctx);
     ret = av_hwframe_get_buffer(data->hw_frames_ctx, data->hw_frame, 0);
     PW_THROW_IF(ret < 0, "hw frame alloc failed");

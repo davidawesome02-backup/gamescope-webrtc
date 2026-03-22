@@ -25,7 +25,6 @@ ExternalProject_Add(ffmpeg_build
         --enable-static
         --enable-pic
         --enable-lto
-        --enable-gpl
 
         # reduce size
         --disable-programs
@@ -59,11 +58,10 @@ ExternalProject_Add(ffmpeg_build
 
 
         # H264 support
-        --enable-hwaccel=h264_vulkan
-        --enable-encoder=h264_vulkan
+        --enable-hwaccel=h264_vaapi
+        --enable-encoder=h264_vaapi
 
-        --enable-vulkan
-        # --enable-vulkan-static
+        --enable-vaapi
 
         # containers
         --enable-muxer=rtp
@@ -91,5 +89,10 @@ target_link_libraries(ffmpeg INTERFACE
     pthread
     m
     z
+
+
+    va
+    va-drm
+    drm
     "-Wl,--no-whole-archive"
 )
