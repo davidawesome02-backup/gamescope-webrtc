@@ -6,53 +6,41 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
+
+    container:
+      image: archlinux:latest
 
     env:
       BUILD_DIR: build
 
     steps:
+      - name: Install dependencies (Arch)
+        run: |
+          pacman -Syu --noconfirm
+
+          pacman -S --noconfirm \
+            base-devel \
+            cmake \
+            ninja \
+            git \
+            pkgconf \
+            vulkan-devel \
+            pipewire \
+            openssl \
+            nasm
+
       - name: Checkout repository (shallow + submodules)
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
           submodules: recursive
 
-      - name: Install system dependencies
+      - name: Verify Vulkan (important debug step)
         run: |
-          sudo apt-get update
-
-          # Core build tools
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-            nasm \
-            ninja-build \
-            pkg-config \
-            git
-
-          # PipeWire + graphics deps
-          sudo apt-get install -y \
-            libpipewire-0.3-dev \
-            libspa-0.2-dev \
-            libvulkan-dev \
-            libvulkan1 \
-            vulkan-tools
-
-          sudo apt-get install -y \
-            libvulkan-dev \
-            vulkan-utility-libraries-dev \
-            spirv-tools
-
-          # SSL (libdatachannel)
-          sudo apt-get install -y \
-            libssl-dev
-
-      - name: Debug Vulkan pkg-config
-        run: |
-          pkg-config --modversion vulkan || true
-          pkg-config --cflags vulkan || true
-          pkg-config --libs vulkan || true
+          pkg-config --modversion vulkan
+          pkg-config --cflags vulkan
+          ls /usr/include/vulkan
 
       - name: Configure CMake
         run: |
@@ -63,7 +51,7 @@ jobs:
 
       - name: Build
         run: |
-          cmake --build $BUILD_DIR --config Release --parallel
+          cmake --build $BUILD_DIR --parallel
 
       - name: Verify outputs
         run: |
