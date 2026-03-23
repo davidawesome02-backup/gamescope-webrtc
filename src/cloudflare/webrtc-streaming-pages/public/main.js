@@ -265,18 +265,25 @@ document.querySelector('button').addEventListener('click',  async () => {
                     parsed_message = JSON.parse(e.data);
                     switch (parsed_message?.["type"]) {
                         case "close":
-                            pc.close()
+                            pc.close() // DOES NOT TRIGGER onconnectionstatechange
+                            pc_on_close()
                             break;
-                    
                         default:
                             break;
                     }
                 } catch {}
             });
         }
-        pc.onclose = (evt) => {
-            document.getElementById("connect_popup").classList.toggle("hidden", false);
-            document.getElementById("video-element").classList.toggle("hidden", true);
+
+        pc.onconnectionstatechange = (evt) => {
+            switch (pc.connectionState) {
+                case "disconnected":
+                case "closed":
+                case "failed":
+                    pc_on_close()
+                default:
+                    break;
+            }
         }
 
         let decoded_b64_offer = JSON.parse(b32dec(websock_msg.offer));
@@ -295,3 +302,9 @@ document.querySelector('button').addEventListener('click',  async () => {
     }
 })
 
+function pc_on_close() {
+    document?.getElementById?.("connect_popup")?.classList?.toggle?.("hidden", false);
+    videoElement?.classList?.toggle?.("hidden", true);
+    document?.exitFullscreen?.();
+    document?.exitPointerLock?.();
+}

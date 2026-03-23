@@ -14,7 +14,7 @@ void exit_streaming(stateData* data) {
         }
 
         if (data->datatrack && data->datatrack.get() && data->datatrack.get()->isOpen()) {
-            data->datatrack.get()->send("{'type':'exiting'}"); // Like the only thing I can do that is force sent before closing
+            data->datatrack.get()->send("{\"type\":\"close\"}"); // Like the only thing I can do that is force sent before closing
             data->datatrack.get()->close();
         }
 

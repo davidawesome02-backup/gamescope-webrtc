@@ -300,15 +300,15 @@ static void registry_event_global(void *data_raw,
     if (client_id && atoi(client_id) == data->pw_target_client_id && data->pw_target_id == -1) {
         std::cout << "Updated target ID: " << id << std::endl;
         const char* media_class = spa_dict_lookup(props, "media.class");
-        std::cout << "Connecting to node id: " << data->pw_target_id << " with media.class: " << (media_class ?: "(none)") << std::endl;
         data->pw_target_id = id;
+        std::cout << "Connecting to node id: " << data->pw_target_id << " with media.class: " << (media_class ?: "(none)") << std::endl;
 
 
         if (data->pw_target_id > 0) {
             int re = pw_stream_connect(data->stream,
                 PW_DIRECTION_INPUT,
                 data->pw_target_id,
-                (enum pw_stream_flags) (PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS),
+                (enum pw_stream_flags)  (PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_DONT_RECONNECT),
                 data->pw_connect_params.pw_target_connect_helper_params, 1);
         }
 
@@ -318,9 +318,30 @@ static void registry_event_global(void *data_raw,
     return;
 }
 
+static void registry_event_global_remove(void *data_raw, uint32_t id)
+{
+    stateData *data = (stateData *)data_raw;
+
+    if (id == data->pw_target_client_id) {
+        std::cout << "Target client removed\n";
+        data->pw_target_client_id = -1;
+    }
+
+    if (id == data->pw_target_id) {
+        std::cout << "Target node removed, stopping stream\n";
+
+        data->pw_target_id = -1;
+
+        // Optionally disconnect stream
+        pw_stream_disconnect(data->stream);
+        exit_streaming(data);
+    }
+}
+
 static const struct pw_registry_events registry_events = {
     PW_VERSION_REGISTRY_EVENTS,
     .global = registry_event_global,
+    .global_remove = registry_event_global_remove,
 };
 
 
