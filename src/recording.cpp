@@ -279,18 +279,6 @@ static void check_recording_disconnect(void *userdata, unsigned long) {
     }
 }
 
-
-
-void print_spa_dict(const struct spa_dict *props) {
-    if (!props) {
-        std::cout << "\t\t\t[spa_dict] (null)\n";
-        return;
-    }
-    for (uint32_t i = 0; i < props->n_items; ++i) {
-        std::cout << "\t\t\t" << props->items[i].key << " = " << props->items[i].value << std::endl;
-    }
-}
-
 static void registry_event_global(void *data_raw,
                                   uint32_t id,
                                   uint32_t permissions,
@@ -300,11 +288,8 @@ static void registry_event_global(void *data_raw,
 {
     stateData *data = (stateData *)data_raw;
 
-    std::cout << "\t\tOffered: " << id << std::endl;
-    print_spa_dict(props);
-
     const char* pid = spa_dict_lookup(props, PW_KEY_SEC_PID);
-    // if (pid) std::cout << "Comparing pid: "<< pid << " to target pid: " << data->pw_target_search_pid << std::endl;
+
     if (pid && atoi(pid) == data->pw_target_search_pid) {
         data->pw_target_client_id = id;
         std::cout << "Updated client target ID: " << id << std::endl;
@@ -312,12 +297,21 @@ static void registry_event_global(void *data_raw,
     }
 
     const char* client_id = spa_dict_lookup(props, PW_KEY_CLIENT_ID);
-    // if (client_id) std::cout << "Comparing client_id: "<< client_id << " to target client: " << data->pw_target_client_id << std::endl;
-    if (client_id && atoi(client_id) == data->pw_target_client_id) {
+    if (client_id && atoi(client_id) == data->pw_target_client_id && data->pw_target_id == -1) {
         std::cout << "Updated target ID: " << id << std::endl;
         const char* media_class = spa_dict_lookup(props, "media.class");
-    std::cout << "Connecting to node id: " << data->pw_target_id << " with media.class: " << (media_class ?: "(none)") << std::endl;
+        std::cout << "Connecting to node id: " << data->pw_target_id << " with media.class: " << (media_class ?: "(none)") << std::endl;
         data->pw_target_id = id;
+
+
+        if (data->pw_target_id > 0) {
+            int re = pw_stream_connect(data->stream,
+                PW_DIRECTION_INPUT,
+                data->pw_target_id,
+                (enum pw_stream_flags) (PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS),
+                data->pw_connect_params.pw_target_connect_helper_params, 1);
+        }
+
         return;
     }
 
@@ -327,25 +321,6 @@ static void registry_event_global(void *data_raw,
 static const struct pw_registry_events registry_events = {
     PW_VERSION_REGISTRY_EVENTS,
     .global = registry_event_global,
-};
-
-static void core_done(void *data_raw, uint32_t id, int seq)
-{
-    stateData *data = (stateData *)data_raw;
-
-    std::cout << "Core sync done; using stream ID: " << data->pw_target_id << std::endl;
-    if (data->pw_target_id > 0) {
-        int re = pw_stream_connect(data->stream,
-            PW_DIRECTION_INPUT,
-            data->pw_target_id,
-            (enum pw_stream_flags) (PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS),
-            data->pw_connect_params.pw_target_connect_helper_params, 1);
-    }
-}
-
-static const pw_core_events core_events = {
-    PW_VERSION_CORE_EVENTS,
-    .done = core_done,
 };
 
 
@@ -419,12 +394,6 @@ void prepare_recording(stateData *data, int targetPid) {
             }
 
             pw_registry *registry = pw_core_get_registry(core, PW_VERSION_REGISTRY, 0);
-
-
-            pw_core_add_listener(core,
-                                &data->core_listener,
-                                &core_events,
-                                data);
 
             pw_registry_add_listener(registry, &data->registry_listener, &registry_events, data);
             

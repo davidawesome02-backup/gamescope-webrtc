@@ -165,6 +165,8 @@ std::string setup_uinput_controller(stateData *data) {
 
     /* Axis configuration */
 
+    // Disabled because this isnt a feature yet, and AI generated bad code.
+
     // setup_ctrl_axis(data->uinput_ctrl_fd, ABS_X, -32768, 32767);
     // setup_ctrl_axis(data->uinput_ctrl_fd, ABS_Y, -32768, 32767);
 
@@ -182,7 +184,7 @@ std::string setup_uinput_controller(stateData *data) {
     struct uinput_setup usetup = {0};
     
     usetup.id.bustype = BUS_USB;
-    usetup.id.vendor = 0x1234;
+    usetup.id.vendor = 0x1234; // TODO replace with better vendor and product ids.
     usetup.id.product = 0x5678;
     strcpy(usetup.name, "Virtual GamescopeWebrtc CTRL");
 
@@ -218,6 +220,9 @@ static void emit_uinput(int fd, int type, int code, int val)
 void process_remote_message(stateData *data, std::vector<std::byte> bin_data) {
 
     if (bin_data.size() >= 6) {
+
+        if (data->pw_disconnect_time != 0) return; // Drop inputs while the display is disconnected prevents some host escapes, but still we are not "safe"
+
         int16_t x_movement = read_le_from_vec<int16_t>(bin_data,1);
         int16_t y_movement = read_le_from_vec<int16_t>(bin_data,3);
         int16_t scroll_movement = read_le_from_vec<int16_t>(bin_data,5);

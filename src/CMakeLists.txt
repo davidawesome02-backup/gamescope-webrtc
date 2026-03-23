@@ -38,10 +38,7 @@ target_compile_options(gamescope-webrtc-lib PRIVATE
 target_link_libraries(gamescope-webrtc-lib PRIVATE
     ${PIPEWIRE_LIBRARIES}
     Threads::Threads
-)
-
-
-target_link_libraries(gamescope-webrtc-lib PRIVATE
+    
     "datachannel"
     "ffmpeg"
 )

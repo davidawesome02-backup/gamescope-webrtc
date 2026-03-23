@@ -87,7 +87,7 @@ std::string b32enc(const std::string& in) {
 
 void setup_RTC(stateData *data, bool create_code, std::string url_base) {
     // ---- WebRTC setup ----
-    rtc::InitLogger(rtc::LogLevel::Debug);
+    rtc::InitLogger(rtc::LogLevel::Warning);
 
     rtc::Configuration config;
     config.iceServers.emplace_back("stun:stun.l.google.com:19302");
@@ -130,10 +130,8 @@ void setup_RTC(stateData *data, bool create_code, std::string url_base) {
                     std::cout << "REC msg from server: "+container_json["type"].get<std::string>() << std::endl;
                     if (container_json["type"].get<std::string>() == "code") {
                         std::cout << "Connection code: "+container_json["code"].get<std::string>() << std::endl;
-                        // asm("int3");
-                        printf("asdasd %p\n", data);
+
                         data->connection_code = std::make_shared<std::string>(container_json["code"].get<std::string>());
-                        printf("asdasd2 %p\n", data);
                     }
                     if (container_json["type"].get<std::string>() != "accept") return;
 
