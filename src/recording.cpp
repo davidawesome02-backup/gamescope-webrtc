@@ -247,7 +247,13 @@ static void on_process(void *userdata) {
 static void on_state_changed(void *userdata, pw_stream_state old, pw_stream_state state, const char *error) {
     stateData *data = (stateData *) userdata;
 
+    std::cout << state << std::endl;
+
     if (state == PW_STREAM_STATE_ERROR) std::cout << "PW error: " << error << std::endl;
+
+    if (state == PW_STREAM_STATE_PAUSED) {
+        pw_stream_set_active(data->stream, true);
+    }
 
     if (
         state == PW_STREAM_STATE_PAUSED     ||
@@ -273,10 +279,10 @@ static void check_recording_disconnect(void *userdata, unsigned long) {
 
     if (data->pw_disconnect_time == 0) return;
 
-    if (std::time(0) - data->pw_disconnect_time >= 4) {
-        std::cout << "PW stream has been paused for >5 seconds, assuming we are dead / have nothing to capture." << std::endl;
-        exit_streaming(data);
-    }
+    // if (std::time(0) - data->pw_disconnect_time >= 4) {
+    //     std::cout << "PW stream has been paused for >5 seconds, assuming we are dead / have nothing to capture." << std::endl;
+    //     exit_streaming(data);
+    // }
 }
 
 static void registry_event_global(void *data_raw,

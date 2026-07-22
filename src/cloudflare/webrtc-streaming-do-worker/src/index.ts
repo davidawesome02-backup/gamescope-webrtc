@@ -1,20 +1,15 @@
 import { DurableObject } from 'cloudflare:workers';
 
-const TTL_MS = 20 * 60 * 1000; // 30 minutes
-
-
 // Durable Object
 export class RtcForwardDO extends DurableObject {
 	// Keeps track of all WebSocket connections
 	// When the DO hibernates, gets reconstructed in the constructor
 	sessions: Map<WebSocket, { [key: string]: string }>;
-	store: StateStore;
 
 
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
 		this.sessions = new Map();
-		this.store = new StateStore(ctx);
 
 		// As part of constructing the Durable Object,
 		// we wake up any hibernating WebSockets and
@@ -22,12 +17,12 @@ export class RtcForwardDO extends DurableObject {
 
 		// Get all WebSocket connections from the DO
 		this.ctx.getWebSockets().forEach((ws) => {
-		let attachment = ws.deserializeAttachment();
-		if (attachment) {
-			// If we previously attached state to our WebSocket,
-			// let's add it to `sessions` map to restore the state of the connection.
-			this.sessions.set(ws, { ...attachment });
-		}
+			let attachment = ws.deserializeAttachment();
+			if (attachment) {
+				// If we previously attached state to our WebSocket,
+				// let's add it to `sessions` map to restore the state of the connection.
+				this.sessions.set(ws, { ...attachment });
+			}
 		});
 
 		// Sets an application level auto response that does not wake hibernated WebSockets.
@@ -51,61 +46,58 @@ export class RtcForwardDO extends DurableObject {
 		this.ctx.acceptWebSocket(server);
 
 		let forwareded_data: {
-			code: string;
-			is_opener: boolean;
-			offer: string | null;
+			code: string | undefined;
+			is_server: boolean | undefined;
+			offer: string | undefined;
 		} = JSON.parse(request.headers.get("XF_FORWARDED_DATA")!);
 		
-		if (forwareded_data.is_opener) {
-			// await this.ctx.storage.put({
-			// 	"initalized": true,
-			// 	"connection_code": forwareded_data.code,
-			// 	"offer": forwareded_data.offer
-			// });
-			this.store.setInitialState(
-				forwareded_data.code,
-				forwareded_data.offer
-			);
+		const client_id = crypto.randomUUID();
 
-			await this.ctx.storage.setAlarm(Date.now()+TTL_MS);
-
-			server.send(JSON.stringify({"type": "code", code: forwareded_data.code}));
+		if (forwareded_data.is_server) {
+			server.send(JSON.stringify({"type": "code", "code": forwareded_data.code}));
 			console.log(`Created new code: ${forwareded_data.code}`)
 		} else {
-			const state = this.store.getState();
-			// if (!await this.ctx.storage.get("initalized")) {
-			if (!state?.initialized) {
-				console.log("Rec invalid code: "+ forwareded_data.code);
-				return new Response('This code is not valid!', {
-					status: 400,
-				});
-			}
-			// let offer = await this.ctx.storage.get("offer");
-			// if (!offer) {
-			if (!state.offer) {
-				console.log("Offer not found for code: "+ forwareded_data.code);
-				return new Response('Offer not found!', {
-					status: 400,
-				});
+			if (!forwareded_data.offer) {
+				server.send(JSON.stringify({"type": "error", "error": `No offer supplied: ${forwareded_data.code}`}));
+				server.close()
 			}
 
-			server.send(JSON.stringify({ "type":"offer", offer: state.offer }));
-			console.log(`Sent client offer for code: ${forwareded_data.code}`)
+			let ws_host_server = Array.from(this.sessions.entries()).find(([ws, att]) => {
+				const parsed_att: {
+					client_id: string;
+					is_server: boolean;
+					code: string;
+				} = JSON.parse(att.session_data);
+
+				return ws.readyState == WebSocket.READY_STATE_OPEN && parsed_att.is_server && parsed_att.code == forwareded_data.code
+			})
+
+			if (ws_host_server) {
+				ws_host_server[0].send(
+					JSON.stringify({
+						"type": "offer",
+						"offer": forwareded_data.offer,
+						"client_id": client_id
+					})
+				);
+			} else {
+				console.log("Failed to find server: "+ forwareded_data.code);
+				server.send(JSON.stringify({"type": "error", "error": "Failed to find server"}));
+				server.close();
+			}
 		}
 
 
-		const client_id = crypto.randomUUID(); // Honestly not needed, just keeping arround for testing.
 
 		let session_data_raw = {
 			client_id,
-			is_opener: forwareded_data.is_opener
+			is_server: forwareded_data.is_server,
+			code: forwareded_data.code
 		};
 		let session_data = JSON.stringify(session_data_raw);
 
 		server.serializeAttachment({session_data});
 		this.sessions.set(server, {session_data});
-
-		
 
 		return new Response(null, {
 			status: 101,
@@ -114,118 +106,58 @@ export class RtcForwardDO extends DurableObject {
 	}
 
 	async webSocketMessage(ws: WebSocket, message: ArrayBuffer | string) {
+		// console.log("Got message: "+message)
 		// Get the session associated with the WebSocket connection.
 		const session = this.sessions.get(ws)!;
 		const session_data: {
 			client_id: string;
-			is_opener: boolean;
+			is_server: boolean;
+			code: string;
 		} = JSON.parse(session.session_data);
 
-		if (session_data.is_opener) return; // Offer should not send a message
+		if (!session_data.is_server) return;
+
+		if (typeof message != "string") return;
+
+		const response_message: {
+			client_id: string | undefined,
+			response: string | undefined
+		} = JSON.parse(message);
 
 
-		this.sessions.forEach((attachment, connectedWs) => {
+		if (typeof response_message.client_id != "string" || typeof response_message.response != "string" || !response_message.response) {
+			ws.send(JSON.stringify({"type": "error", "error": "Failed to parse request"}));
+			ws.close();
+			return;
+		}
+
+		let ws_client = Array.from(this.sessions.entries()).find(([ws, att]) => {
 			const temp_session_data: {
 				client_id: string;
-				is_opener: boolean;
-			} = JSON.parse(attachment.session_data);
+				is_server: boolean;
+			} = JSON.parse(att.session_data);
 			
-			if (!temp_session_data.is_opener) return; // Only send to upstream
+			if (temp_session_data.is_server) return false; // Only send to upstream
+			if (temp_session_data.client_id != response_message.client_id) return false;
 
-			connectedWs.send(JSON.stringify({
-				"type": "accept",
-				"accept": message
-			}));
-		});
+			return true;
+		})
 
-		// ws.close();
-		this.cleanup("Done forwarding!");
+		if (ws_client) {
+			ws_client[0].send(JSON.stringify({"type": "answer", "answer": response_message.response}));
+			ws_client[0].close();
+		} else {
+			ws.send(JSON.stringify({"type": "client_error", "client_error": "Client dead", "client_id": response_message.client_id}));
+			ws.close();
+		}
+
 	}
 
 	async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean) {
 		// If the client closes the connection, the runtime will invoke the webSocketClose() handler.
 		this.sessions.delete(ws);
-		ws.close(code, 'Durable Object is closing WebSocket');
 		console.log("Ws closed!")
-		if (this.sessions.size == 0) this.cleanup("All ws dead");
 	}
-
-	async alarm() {
-		await this.cleanup("TTL expired");
-	}
-
-	async cleanup(reason: string) {
-		const state = this.store.getState();
-		let connection_code = state?.connection_code
-		//await this.ctx.storage.get('connection_code');
-		console.log(`Cleaning up DO (${connection_code}): ${reason}`);
-
-		// Close all sockets
-		for (const ws of this.sessions.keys()) {
-			try {
-			ws.close(1000, "Session ended");
-			} catch {}
-		}
-
-		this.sessions.clear();
-
-		// Delete ALL persisted storage (this is what stops billing)
-		// await this.ctx.storage.deleteAll();
-		this.store.clear();
-		await this.ctx.storage.deleteAlarm();
-	}
-
-
 }
-
-
-class StateStore {
-  db: SqlStorage;
-
-  constructor(ctx: DurableObjectState) {
-    this.db = ctx.storage.sql;
-
-    // Initialize schema
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS state (
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        initialized INTEGER NOT NULL,
-        connection_code TEXT,
-        offer TEXT
-      );
-    `);
-  }
-
-  setInitialState(code: string, offer: string | null) {
-    this.db.exec(
-      `
-      INSERT OR REPLACE INTO state (id, initialized, connection_code, offer)
-      VALUES (1, 1, ?, ?)
-      `,
-      code, offer
-    );
-  }
-
-  getState(): {
-    initialized: boolean;
-    connection_code: string | null;
-    offer: string | null;
-  } | null {
-    const cursor = this.db.exec(`SELECT * FROM state WHERE id = 1`);
-    const row = cursor.next()?.value;
-    if (!row) return null;
-
-    return {
-      initialized: !!row.initialized,
-      connection_code: row.connection_code as string|null,
-      offer: row.offer as string|null,
-    };
-  }
-
-  clear() {
-    this.db.exec(`DELETE FROM state`);
-  }
-}
-
 
 export default {};
