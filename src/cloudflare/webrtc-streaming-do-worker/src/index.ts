@@ -32,7 +32,7 @@ export class RtcForwardDO extends DurableObject {
 	async fetch(request: Request): Promise<Response> {
 		// Creates two ends of a WebSocket connection.
 		const webSocketPair = new WebSocketPair();
-		const [client, server] = Object.values(webSocketPair);
+		const [client_ws_dont_use, server] = Object.values(webSocketPair);
 
 		// Calling `acceptWebSocket()` informs the runtime that this WebSocket is to begin terminating
 		// request within the Durable Object. It has the effect of "accepting" the connection,
@@ -55,11 +55,15 @@ export class RtcForwardDO extends DurableObject {
 
 		if (forwareded_data.is_server) {
 			server.send(JSON.stringify({"type": "code", "code": forwareded_data.code}));
-			console.log(`Created new code: ${forwareded_data.code}`)
+			console.log(`Created new code: ${forwareded_data.code}`);
 		} else {
 			if (!forwareded_data.offer) {
 				server.send(JSON.stringify({"type": "error", "error": `No offer supplied: ${forwareded_data.code}`}));
-				server.close()
+				server.close();
+				return new Response(null, {
+					status: 101,
+					webSocket: client_ws_dont_use,
+				});
 			}
 
 			let ws_host_server = Array.from(this.sessions.entries()).find(([ws, att]) => {
@@ -69,7 +73,7 @@ export class RtcForwardDO extends DurableObject {
 					code: string;
 				} = JSON.parse(att.session_data);
 
-				return ws.readyState == WebSocket.READY_STATE_OPEN && parsed_att.is_server && parsed_att.code == forwareded_data.code
+				return ws.readyState == WebSocket.OPEN && parsed_att.is_server && parsed_att.code == forwareded_data.code
 			})
 
 			if (ws_host_server) {
@@ -84,6 +88,10 @@ export class RtcForwardDO extends DurableObject {
 				console.log("Failed to find server: "+ forwareded_data.code);
 				server.send(JSON.stringify({"type": "error", "error": "Failed to find server"}));
 				server.close();
+				return new Response(null, {
+					status: 101,
+					webSocket: client_ws_dont_use,
+				});
 			}
 		}
 
@@ -101,7 +109,7 @@ export class RtcForwardDO extends DurableObject {
 
 		return new Response(null, {
 			status: 101,
-			webSocket: client,
+			webSocket: client_ws_dont_use,
 		});
 	}
 
@@ -119,13 +127,17 @@ export class RtcForwardDO extends DurableObject {
 
 		if (typeof message != "string") return;
 
-		const response_message: {
+		let response_message: {
 			client_id: string | undefined,
 			response: string | undefined
-		} = JSON.parse(message);
+		} | undefined = undefined;
+
+		try {
+			response_message = JSON.parse(message);
+		} catch {}
 
 
-		if (typeof response_message.client_id != "string" || typeof response_message.response != "string" || !response_message.response) {
+		if (!response_message || typeof response_message.client_id != "string" || typeof response_message.response != "string" || !response_message.response) {
 			ws.send(JSON.stringify({"type": "error", "error": "Failed to parse request"}));
 			ws.close();
 			return;
@@ -156,7 +168,10 @@ export class RtcForwardDO extends DurableObject {
 	async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean) {
 		// If the client closes the connection, the runtime will invoke the webSocketClose() handler.
 		this.sessions.delete(ws);
-		console.log("Ws closed!")
+		try {
+			ws.close(500, "WebSocket close attempted.");
+		} catch {}
+		console.log("Ws closed!");
 	}
 }
 

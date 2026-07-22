@@ -7,7 +7,7 @@ const CODE_LENGTH = 6;
 
 function random_b32(): string {
 	let out = "";
-	let alph = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+	let alph = "ABCDEFGHIJKLMNOPQRTUVWXYZ2345679"
 	const random_arr = new Uint32Array(CODE_LENGTH);
 	crypto.getRandomValues(random_arr);
 	for (let random of random_arr) out+=alph[random%alph.length];
@@ -17,9 +17,9 @@ function random_b32(): string {
 function normalize_b32(b32_raw: string): string {
 	b32_raw = b32_raw.toUpperCase()
 					 .replaceAll("0","O")
-					 .replaceAll("1","i")
-					 .replaceAll("s","5");
-	let alph = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+					 .replaceAll("1","I")
+					 .replaceAll("S","5");
+	let alph = "ABCDEFGHIJKLMNOPQRTUVWXYZ2345679"
 
 	let out = "";
 	for (let char of b32_raw) if (alph.includes(char)) out+=char;
@@ -81,7 +81,7 @@ export async function onRequest(ctx: EventContext<Env, string, Record<string, un
 		let stub = ctx.env.RTC_FW_DO_WORKER.getByName("DO_MAIN_INSTANCE");
 
 		const jointHeaders = new Headers(request.headers);
-		
+
 		let added_headers = { code, is_server, offer };
 		jointHeaders.set(
 			"XF_FORWARDED_DATA",
