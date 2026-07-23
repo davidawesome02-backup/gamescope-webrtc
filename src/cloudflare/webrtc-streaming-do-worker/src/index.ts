@@ -1,5 +1,30 @@
 import { DurableObject } from 'cloudflare:workers';
 
+
+const CODE_LENGTH = 6;
+
+function random_b32(): string {
+	let out = "";
+	let alph = "ABCDEFGHIJKLMNOPQRTUVWXYZ2345679"
+	const random_arr = new Uint32Array(CODE_LENGTH);
+	crypto.getRandomValues(random_arr);
+	for (let random of random_arr) out+=alph[random%alph.length];
+	return out;
+}
+
+function normalize_b32(b32_raw: string): string {
+	b32_raw = b32_raw.toUpperCase()
+					.replaceAll("0","O")
+					.replaceAll("1","I")
+					.replaceAll("S","5");
+	let alph = "ABCDEFGHIJKLMNOPQRTUVWXYZ2345679"
+
+	let out = "";
+	for (let char of b32_raw) if (alph.includes(char)) out+=char;
+	
+	return out;
+}
+
 // Durable Object
 export class RtcForwardDO extends DurableObject {
 	// Keeps track of all WebSocket connections
@@ -45,15 +70,32 @@ export class RtcForwardDO extends DurableObject {
 		// (run the `constructor`) and deliver the message to the appropriate handler.
 		this.ctx.acceptWebSocket(server);
 
-		let forwareded_data: {
-			code: string | undefined;
-			is_server: boolean | undefined;
-			offer: string | undefined;
+		const forwareded_data: {
+			code: string | null;
+			offer: string | null;
 		} = JSON.parse(request.headers.get("XF_FORWARDED_DATA")!);
 		
 		const client_id = crypto.randomUUID();
 
-		if (forwareded_data.is_server) {
+		if (forwareded_data.code != null) {
+			forwareded_data.code = normalize_b32(forwareded_data.code);
+			if (forwareded_data.code.length != 6) forwareded_data.code = null;
+		}
+
+		let is_server = forwareded_data.code == null;
+
+		if (is_server) {
+			if (forwareded_data.offer) {
+				server.send(JSON.stringify({"type": "error", "error": `Invalid code format or offer.`}));
+				server.close();
+				return new Response(null, {
+					status: 101,
+					webSocket: client_ws_dont_use,
+				});
+			}
+
+			forwareded_data.code = random_b32();
+
 			server.send(JSON.stringify({"type": "code", "code": forwareded_data.code}));
 			console.log(`Created new code: ${forwareded_data.code}`);
 		} else {
@@ -99,7 +141,7 @@ export class RtcForwardDO extends DurableObject {
 
 		let session_data_raw = {
 			client_id,
-			is_server: forwareded_data.is_server,
+			is_server,
 			code: forwareded_data.code
 		};
 		let session_data = JSON.stringify(session_data_raw);
