@@ -28,7 +28,6 @@ export async function onRequest(ctx: EventContext<Env, string, Record<string, un
 		}
 
 		const url = new URL(request.url)
-		let is_server = false;
 
 		let code = url.searchParams.get("code")
 		let offer = url.searchParams.get("offer");

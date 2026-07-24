@@ -25,33 +25,43 @@ function normalize_b32(b32_raw: string): string {
 	return out;
 }
 
+type WS_ATTACHMENT = {
+    client_id: string;
+    is_server: boolean;
+    code: string | null;
+};
+
 // Durable Object
 export class RtcForwardDO extends DurableObject {
 	// Keeps track of all WebSocket connections
 	// When the DO hibernates, gets reconstructed in the constructor
-	sessions: Map<WebSocket, { [key: string]: string }>;
-
+	// sessions: Map<WebSocket, { [key: string]: string }>;
+	ws_known: WebSocket[];
+	ws_attach: Map<WebSocket, WS_ATTACHMENT>;
 
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
-		this.sessions = new Map();
+		this.ws_attach = new Map();
 
 		// As part of constructing the Durable Object,
 		// we wake up any hibernating WebSockets and
 		// place them back in the `sessions` map.
 
 		// Get all WebSocket connections from the DO
-		this.ctx.getWebSockets().forEach((ws) => {
-			let attachment = ws.deserializeAttachment();
-			if (attachment) {
-				// If we previously attached state to our WebSocket,
-				// let's add it to `sessions` map to restore the state of the connection.
-				this.sessions.set(ws, { ...attachment });
-			}
-		});
+		this.ws_known = this.ctx.getWebSockets();
 
 		// Sets an application level auto response that does not wake hibernated WebSockets.
 		this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+	}
+
+	// Quick cache map in case we get many look ups
+	ws_get_attachment(ws: WebSocket): WS_ATTACHMENT | undefined {
+		const stored_ws_attach = this.ws_attach.get(ws);
+		if (stored_ws_attach) return stored_ws_attach;
+
+		const ws_deserialized = ws.deserializeAttachment();
+		this.ws_attach.set(ws, ws_deserialized)
+		return ws_deserialized
 	}
 
 	async fetch(request: Request): Promise<Response> {
@@ -70,22 +80,25 @@ export class RtcForwardDO extends DurableObject {
 		// (run the `constructor`) and deliver the message to the appropriate handler.
 		this.ctx.acceptWebSocket(server);
 
-		const forwareded_data: {
+
+		const sent_host_data = request.headers.get("XF_FORWARDED_DATA");
+		if (!sent_host_data) return new Response(null, { status: 500 });
+		const forwarded_data: {
 			code: string | null;
 			offer: string | null;
-		} = JSON.parse(request.headers.get("XF_FORWARDED_DATA")!);
+		} = JSON.parse(sent_host_data);
 		
 		const client_id = crypto.randomUUID();
 
-		if (forwareded_data.code != null) {
-			forwareded_data.code = normalize_b32(forwareded_data.code);
-			if (forwareded_data.code.length != 6) forwareded_data.code = null;
+		if (forwarded_data.code != null) {
+			forwarded_data.code = normalize_b32(forwarded_data.code);
+			if (forwarded_data.code.length != 6) forwarded_data.code = null;
 		}
 
-		let is_server = forwareded_data.code == null;
+		let is_server = forwarded_data.code == null;
 
 		if (is_server) {
-			if (forwareded_data.offer) {
+			if (forwarded_data.offer) {
 				server.send(JSON.stringify({"type": "error", "error": `Invalid code format or offer.`}));
 				server.close();
 				return new Response(null, {
@@ -94,13 +107,13 @@ export class RtcForwardDO extends DurableObject {
 				});
 			}
 
-			forwareded_data.code = random_b32();
+			forwarded_data.code = random_b32();
 
-			server.send(JSON.stringify({"type": "code", "code": forwareded_data.code}));
-			console.log(`Created new code: ${forwareded_data.code}`);
+			server.send(JSON.stringify({"type": "code", "code": forwarded_data.code}));
+			console.log(`Created new code: ${forwarded_data.code}`);
 		} else {
-			if (!forwareded_data.offer) {
-				server.send(JSON.stringify({"type": "error", "error": `No offer supplied: ${forwareded_data.code}`}));
+			if (!forwarded_data.offer) {
+				server.send(JSON.stringify({"type": "error", "error": `No offer supplied: ${forwarded_data.code}`}));
 				server.close();
 				return new Response(null, {
 					status: 101,
@@ -108,26 +121,22 @@ export class RtcForwardDO extends DurableObject {
 				});
 			}
 
-			let ws_host_server = Array.from(this.sessions.entries()).find(([ws, att]) => {
-				const parsed_att: {
-					client_id: string;
-					is_server: boolean;
-					code: string;
-				} = JSON.parse(att.session_data);
+			let ws_host_server = Array.from(this.ws_known).find((find_ws) => {
+				const parsed_att = this.ws_get_attachment(find_ws);
 
-				return ws.readyState == WebSocket.OPEN && parsed_att.is_server && parsed_att.code == forwareded_data.code
-			})
+				return find_ws.readyState == WebSocket.OPEN && parsed_att && parsed_att.is_server && parsed_att.code == forwarded_data.code
+			});
 
 			if (ws_host_server) {
-				ws_host_server[0].send(
+				ws_host_server.send(
 					JSON.stringify({
 						"type": "offer",
-						"offer": forwareded_data.offer,
+						"offer": forwarded_data.offer,
 						"client_id": client_id
 					})
 				);
 			} else {
-				console.log("Failed to find server: "+ forwareded_data.code);
+				console.log("Failed to find server: "+ forwarded_data.code);
 				server.send(JSON.stringify({"type": "error", "error": "Failed to find server"}));
 				server.close();
 				return new Response(null, {
@@ -139,16 +148,17 @@ export class RtcForwardDO extends DurableObject {
 
 
 
-		let session_data_raw = {
+		let session_data: WS_ATTACHMENT = {
 			client_id,
 			is_server,
-			code: forwareded_data.code
+			code: forwarded_data.code
 		};
-		let session_data = JSON.stringify(session_data_raw);
 
-		server.serializeAttachment({session_data});
-		this.sessions.set(server, {session_data});
-		console.log(`Ws opened: ${session_data}`);
+		server.serializeAttachment(session_data);
+		this.ws_known.push(server);
+		this.ws_attach.set(server, session_data);
+
+		console.log(`Ws opened: ${JSON.stringify(session_data)}`);
 
 		return new Response(null, {
 			status: 101,
@@ -158,16 +168,10 @@ export class RtcForwardDO extends DurableObject {
 
 	async webSocketMessage(ws: WebSocket, message: ArrayBuffer | string) {
 		// Get the session associated with the WebSocket connection.
-		const session = this.sessions.get(ws);
-		if (!session) { console.log("Unknown websockt state!"); ws.close(500); return; }
+		const ws_attach = this.ws_get_attachment(ws);
+		if (!ws_attach) { console.log("Unknown websockt state!"); ws.close(500); return; }
 
-		const session_data: {
-			client_id: string;
-			is_server: boolean;
-			code: string;
-		} = JSON.parse(session.session_data);
-
-		if (!session_data.is_server) return;
+		if (!ws_attach.is_server) return;
 
 		if (typeof message != "string") return;
 
@@ -187,11 +191,9 @@ export class RtcForwardDO extends DurableObject {
 			return;
 		}
 
-		let ws_client = Array.from(this.sessions.entries()).find(([ws, att]) => {
-			const temp_session_data: {
-				client_id: string;
-				is_server: boolean;
-			} = JSON.parse(att.session_data);
+		let ws_client = Array.from(this.ws_known).find((ws) => {
+			const temp_session_data = this.ws_get_attachment(ws);
+			if (!temp_session_data) return false;
 			
 			if (temp_session_data.is_server) return false; // Only send to upstream
 			if (temp_session_data.client_id != response_message.client_id) return false;
@@ -200,8 +202,8 @@ export class RtcForwardDO extends DurableObject {
 		})
 
 		if (ws_client) {
-			ws_client[0].send(JSON.stringify({"type": "answer", "answer": response_message.response}));
-			ws_client[0].close();
+			ws_client.send(JSON.stringify({"type": "answer", "answer": response_message.response}));
+			ws_client.close();
 		} else {
 			ws.send(JSON.stringify({"type": "client_error", "client_error": "Client dead", "client_id": response_message.client_id}));
 			ws.close();
@@ -210,11 +212,14 @@ export class RtcForwardDO extends DurableObject {
 
 	async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean) {
 		// If the client closes the connection, the runtime will invoke the webSocketClose() handler.
-		console.log(`Ws closed: ${this.sessions.get(ws)?.session_data}`);
-		this.sessions.delete(ws);
-		try {
-			ws.close(500, "WebSocket close attempted.");
-		} catch {}
+		console.log(`Ws closed: ${JSON.stringify(this.ws_get_attachment(ws))}`);
+		this.ws_attach.delete(ws);
+
+		const ws_index = this.ws_known.indexOf(ws);
+		if (ws_index >= 0) this.ws_known.splice(ws_index, 1);
+		// try {
+		// 	ws.close(500, "WebSocket close attempted.");
+		// } catch {}
 	}
 }
 
