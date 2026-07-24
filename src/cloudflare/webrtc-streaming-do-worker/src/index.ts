@@ -5,7 +5,7 @@ const CODE_LENGTH = 6;
 
 function random_b32(): string {
 	let out = "";
-	let alph = "ABCDEFGHIJKLMNOPQRTUVWXYZ2345679"
+	let alph = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 	const random_arr = new Uint32Array(CODE_LENGTH);
 	crypto.getRandomValues(random_arr);
 	for (let random of random_arr) out+=alph[random%alph.length];
@@ -14,10 +14,10 @@ function random_b32(): string {
 
 function normalize_b32(b32_raw: string): string {
 	b32_raw = b32_raw.toUpperCase()
-					.replaceAll("0","O")
-					.replaceAll("1","I")
-					.replaceAll("S","5");
-	let alph = "ABCDEFGHIJKLMNOPQRTUVWXYZ2345679"
+					.replaceAll("O","0")
+					.replaceAll("I","1")
+					.replaceAll("L","1");
+	let alph = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 	let out = "";
 	for (let char of b32_raw) if (alph.includes(char)) out+=char;
@@ -148,6 +148,7 @@ export class RtcForwardDO extends DurableObject {
 
 		server.serializeAttachment({session_data});
 		this.sessions.set(server, {session_data});
+		console.log(`Ws opened: ${session_data}`);
 
 		return new Response(null, {
 			status: 101,
@@ -156,9 +157,10 @@ export class RtcForwardDO extends DurableObject {
 	}
 
 	async webSocketMessage(ws: WebSocket, message: ArrayBuffer | string) {
-		// console.log("Got message: "+message)
 		// Get the session associated with the WebSocket connection.
-		const session = this.sessions.get(ws)!;
+		const session = this.sessions.get(ws);
+		if (!session) { console.log("Unknown websockt state!"); ws.close(500); return; }
+
 		const session_data: {
 			client_id: string;
 			is_server: boolean;
@@ -204,16 +206,15 @@ export class RtcForwardDO extends DurableObject {
 			ws.send(JSON.stringify({"type": "client_error", "client_error": "Client dead", "client_id": response_message.client_id}));
 			ws.close();
 		}
-
 	}
 
 	async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean) {
 		// If the client closes the connection, the runtime will invoke the webSocketClose() handler.
+		console.log(`Ws closed: ${this.sessions.get(ws)?.session_data}`);
 		this.sessions.delete(ws);
 		try {
 			ws.close(500, "WebSocket close attempted.");
 		} catch {}
-		console.log("Ws closed!");
 	}
 }
 
