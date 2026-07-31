@@ -191,8 +191,10 @@ export class RtcForwardDO extends DurableObject {
 			return;
 		}
 
-		let ws_client = Array.from(this.ws_known).find((ws) => {
-			const temp_session_data = this.ws_get_attachment(ws);
+		let ws_client = Array.from(this.ws_known).find((ws_find) => {
+			if (ws_find.readyState != WebSocket.OPEN) return false;
+
+			const temp_session_data = this.ws_get_attachment(ws_find);
 			if (!temp_session_data) return false;
 			
 			if (temp_session_data.is_server) return false; // Only send to upstream
@@ -217,9 +219,6 @@ export class RtcForwardDO extends DurableObject {
 
 		const ws_index = this.ws_known.indexOf(ws);
 		if (ws_index >= 0) this.ws_known.splice(ws_index, 1);
-		// try {
-		// 	ws.close(500, "WebSocket close attempted.");
-		// } catch {}
 	}
 }
 

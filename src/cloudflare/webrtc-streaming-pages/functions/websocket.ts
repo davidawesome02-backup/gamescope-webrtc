@@ -5,8 +5,6 @@ interface Env {
 // Worker
 export async function onRequest(ctx: EventContext<Env, string, Record<string, unknown>>): Promise<Response> {
 	const request = ctx.request;
-	const env = ctx.env;
-
 
 	let url = new URL(request.url);
 	if (url.pathname == '/websocket') {
